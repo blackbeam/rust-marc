@@ -316,11 +316,34 @@ macro_rules! read_exact(
             Err(e) => Err(e),
         }
     });
-    ($source:expr, $dest:expr, $count:expr, $edesc:expr) => ({
-        let mut rc = $count as usize;
+    ($source:expr, $dest:expr, $count:expr) => ({
+        let mut rc = $count;
         let mut err = None;
         loop {
-            match $source.read(&mut $dest[($count as usize - rc)..rc]) {
+            match $source.read(&mut $dest[($count - rc)..rc]) {
+                Ok(c) => {
+                    rc -= c;
+                    if rc == 0 || c == 0 {
+                        break;
+                    }
+                },
+                Err(e) => {
+                    err = Some(e);
+                    break;
+                }
+            }
+        }
+        if err.is_none() {
+            Ok($count - rc)
+        } else {
+            Err(err.unwrap())
+        }
+    });
+    ($source:expr, $dest:expr, $count:expr, $edesc:expr) => ({
+        let mut rc = $count;
+        let mut err = None;
+        loop {
+            match $source.read(&mut $dest[($count - rc)..rc]) {
                 Ok(c) => {
                     if c == rc {
                         break;
@@ -375,7 +398,7 @@ trait MrcReadInternal: io::Read {
     fn read_dec_num(&mut self, len: u8) -> io::Result<u32> {
         assert!(0 < len && len < 11);
         let mut buf = [0u8; 11];
-        try!(read_exact!(self, buf, len, "Unexpected EOF while reading decimal number"));
+        try!(read_exact!(self, buf, len as usize, "Unexpected EOF while reading decimal number"));
         let mut res = 0u32;
         let mut pos = len;
         for &i in &buf[..(len as usize)] {
@@ -413,10 +436,16 @@ impl<T: io::Read + ?Sized> MrcReadInternal for T {}
 pub trait MrcRead: io::Read {
     fn read_record(&mut self) -> io::Result<Option<Record>> {
         let mut rec = io::Cursor::new(Vec::with_capacity(5));
-
-        try!(self.take(5).read_to_end(rec.get_mut()));
-        if rec.get_ref().len() == 0 {
-            return Ok(None)
+        unsafe {
+            rec.get_mut().set_len(5);
+        }
+        match read_exact!(self, rec.get_mut().as_mut_slice(), 5) {
+            Ok(0) => return Ok(None),
+            Ok(x) if x < 5 => return Err(io::Error::new(io::ErrorKind::Other,
+                                                        "Unexpected EOF while reading record length",
+                                                        None)),
+            Err(e) => return Err(e),
+            _ => (),
         }
 
         let record_length = try!(rec.read_dec_num(5));
@@ -427,11 +456,15 @@ pub trait MrcRead: io::Read {
         }
 
         rec.get_mut().reserve(record_length as usize - 5);
-        try!(self.take((record_length - 5) as u64).read_to_end(rec.get_mut()));
-        if rec.get_ref().len() != record_length as usize {
-            return Err(io::Error::new(io::ErrorKind::Other,
-                                      "Unexpected EOF while reading record",
-                                      None));
+        unsafe {
+            rec.get_mut().set_len(record_length as usize);
+        }
+        match read_exact!(self, &mut rec.get_mut()[5..], record_length as usize - 5) {
+            Ok(x) if x < record_length as usize - 5 => return Err(io::Error::new(io::ErrorKind::Other,
+                                                              "Unexpected EOF while reading record",
+                                                              None)),
+            Err(e) => return Err(e),
+            _ => (),
         }
         if rec.get_ref()[rec.get_ref().len()-1] != RECORD_TERMINATOR {
             return Err(io::Error::new(io::ErrorKind::Other,
