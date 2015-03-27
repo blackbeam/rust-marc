@@ -1,8 +1,9 @@
-#![feature(io, collections, unicode)]
+#![feature(io, collections, unicode, convert)]
 #![cfg_attr(test, feature(test))]
 
 #[cfg(test)] extern crate test;
 
+use std::borrow::Borrow;
 use std::borrow::ToOwned;
 use std::char;
 use std::io;
@@ -18,67 +19,96 @@ const SUBFIELD_DELIMITER: u8 = 0x1F;
 
 /// Field representation.
 pub type FieldRepr = (Tag, Vec<u8>);
+
 /// Subfield representation.
 pub type SubfieldRepr = (Identifier, Vec<u8>);
+
 /// Field tag representation.
-pub type Tag = [u8; 3];
+///
+/// `Into<Tag>` are implemented for `&[u8]`, `&str`, `[u8; 3]` and `Tag`.
+///
+/// `From<&Tag>` are implemented for `&[u8]`, `&str`, `[u8; 3]` and `&Tag`.
+#[derive(Eq, PartialEq, Ord, PartialOrd,
+         Clone, Hash, Debug)]
+pub struct Tag([u8; 3]);
+
 /// Data field indicator representation.
-pub type Indicator = [u8; 2];
+#[derive(Eq, PartialEq, Ord, PartialOrd,
+         Clone, Hash, Debug)]
+pub struct Indicator([u8; 2]);
+
 /// Subfield identifier representation.
-pub type Identifier = u8;
+#[derive(Eq, PartialEq, Ord, PartialOrd,
+         Clone, Copy, Hash, Debug)]
+pub struct Identifier(u8);
+
+/// Reference to a data of a field.
+pub struct FieldData<'a>(&'a [u8]);
+
 // -> (tag, field_len, start_pos)
 type DirectoryEntry = (Tag, u32, u32);
 
-/// Entities that can be interpreted as tags.
-pub trait AsTag {
-    fn as_tag(&self) -> Tag;
-}
-
-impl AsTag for Tag {
-    #[inline]
-    fn as_tag(&self) -> Tag {
-        *self
-    }
-}
-
-impl<'a> AsTag for &'a [u8] {
-    #[inline]
-    fn as_tag(&self) -> Tag {
-        assert!(self.len() == 3, "Tag length != 3");
-        [self[0], self[1], self[2]]
-    }
-}
-
-impl<'a> AsTag for &'a str {
-    #[inline]
-    fn as_tag(&self) -> Tag {
-        AsTag::as_tag(&self.as_bytes())
-    }
-}
-
-/// Entities that can be created from tags.
-pub trait FromTag {
-    fn from_tag(tag: &Tag) -> &Self;
-}
-
-impl FromTag for [u8] {
-    #[inline]
-    fn from_tag(tag: &Tag) -> &[u8] {
-        &tag[..]
-    }
-}
-
-impl FromTag for str {
-    #[inline]
-    fn from_tag(tag: &Tag) -> &str {
-        str::from_utf8(&tag[..]).unwrap()
-    }
-}
-
-impl FromTag for Tag {
-    #[inline]
-    fn from_tag(tag: &Tag) -> &Tag {
+impl Borrow<[u8]> for Tag {
+    fn borrow(&self) -> &[u8] {
+        let &Tag(ref tag) = self;
         tag
+    }
+}
+
+impl<'a> Borrow<[u8]> for FieldData<'a> {
+    fn borrow(&self) -> &[u8] {
+        let &FieldData(ref data) = self;
+        data
+    }
+}
+
+impl From<Tag> for Tag {
+    fn from(t: Tag) -> Tag {
+        t
+    }
+}
+
+impl<'a> From<&'a [u8]> for Tag {
+    fn from(s: &'a [u8]) -> Tag {
+        assert!(s.len() == 3, "Tag length != 3");
+        Tag([s[0], s[1], s[2]])
+    }
+}
+
+impl<'a> From<&'a str> for Tag {
+    fn from(s: &'a str) -> Tag {
+        s.as_bytes().into()
+    }
+}
+
+impl From<[u8; 3]> for Tag {
+    fn from(s: [u8; 3]) -> Tag {
+        Tag(s)
+    }
+}
+
+impl<'a> From<&'a Tag> for &'a str {
+    fn from(tag: &'a Tag) -> &'a str {
+        str::from_utf8(tag.borrow()).unwrap()
+    }
+}
+
+impl<'a> From<&'a Tag> for &'a [u8] {
+    fn from(tag: &'a Tag) -> &'a [u8] {
+        tag.borrow()
+    }
+}
+
+impl<'a> From<&'a Tag> for &'a Tag {
+    fn from(tag: &'a Tag) -> &'a Tag {
+        tag
+    }
+}
+
+impl<'a> From<&'a Tag> for [u8; 3] {
+    fn from(tag: &'a Tag) -> [u8; 3] {
+        let Tag(x) = tag.clone();
+        x
     }
 }
 
@@ -101,200 +131,102 @@ impl FromFieldData for str {
     }
 }
 
-/// Entities that can be created from identifier of a subfield.
-pub trait FromIdentifier {
-    fn from_identifier(ident: Identifier) -> Self;
-}
-
-impl FromIdentifier for Identifier {
-    #[inline]
-    fn from_identifier(ident: Identifier) -> Identifier {
+impl From<Identifier> for Identifier {
+    fn from(ident: Identifier) -> Identifier {
         ident
     }
 }
 
-impl FromIdentifier for char {
-    #[inline]
-    fn from_identifier(ident: Identifier) -> char {
-        char::from_u32(ident as u32).unwrap()
+impl From<Identifier> for u8 {
+    fn from(Identifier(x): Identifier) -> u8 {
+        x
     }
 }
 
-/// Entities that can be interpreted as identifier of a subfield.
-pub trait AsIdentifier {
-    fn as_identifier(&self) -> Identifier;
-}
-
-impl AsIdentifier for Identifier {
-    #[inline]
-    fn as_identifier(&self) -> Identifier {
-        self.clone()
+impl From<Identifier> for char {
+    fn from(Identifier(x): Identifier) -> char {
+        char::from_u32(x as u32).unwrap()
     }
 }
 
-impl AsIdentifier for char {
-    fn as_identifier(&self) -> Identifier {
+impl Into<Identifier> for char {
+    fn into(self) -> Identifier {
         assert_eq!(self.len_utf8(), 1);
         let mut dst = [0u8];
         self.encode_utf8(&mut dst);
-        dst[0]
+        Identifier(dst[0])
     }
 }
 
-impl<'a> AsIdentifier for &'a [u8] {
-    #[inline]
-    fn as_identifier(&self) -> Identifier {
-        assert_eq!(self.len(), 1);
-        self[0]
+impl Into<Identifier> for u8 {
+    fn into(self) -> Identifier {
+        Identifier(self)
     }
 }
 
-impl<'a> AsIdentifier for &'a str {
-    #[inline]
-    fn as_identifier(&self) -> Identifier {
-        assert_eq!(self.as_bytes().len(), 1);
-        self.as_bytes()[0]
-    }
-}
-
-/// Entities that can be created from indicator of a data field.
-pub trait FromIndicator {
-    fn from_indicator(ind: Indicator) -> Self;
-}
-
-impl FromIndicator for Indicator {
-    #[inline]
-    fn from_indicator(ind: Indicator) -> Indicator {
+impl Borrow<[u8]> for Indicator {
+    fn borrow(&self) -> &[u8] {
+        let &Indicator(ref ind) = self;
         ind
     }
 }
 
-impl FromIndicator for [char; 2] {
-    #[inline]
-    fn from_indicator(ind: Indicator) -> [char; 2] {
+impl From<Indicator> for Indicator {
+    fn from(ind: Indicator) -> Indicator {
+        ind
+    }
+}
+
+impl From<Indicator> for [u8; 2] {
+    fn from(Indicator(ind): Indicator) -> [u8; 2] {
+        ind
+    }
+}
+
+impl From<Indicator> for [char; 2] {
+    fn from(Indicator(ind): Indicator) -> [char; 2] {
         [char::from_u32(ind[0] as u32).unwrap(), char::from_u32(ind[1] as u32).unwrap()]
     }
 }
 
-/// Entities that can be interpreted as `Indicator`.
-pub trait AsIndicator {
-    fn as_indicator(&self) -> Indicator;
-}
-
-impl AsIndicator for Indicator {
-    #[inline]
-    fn as_indicator(&self) -> Indicator {
-        self.clone()
-    }
-}
-
-impl<'a> AsIndicator for &'a [u8] {
-    #[inline]
-    fn as_indicator(&self) -> Indicator {
-        assert_eq!(self.len(), 2);
-        [self[0], self[1]]
-    }
-}
-
-impl<'a> AsIndicator for &'a str {
-    #[inline]
-    fn as_indicator(&self) -> Indicator {
-        assert_eq!(self.as_bytes().len(), 2);
-        [self.as_bytes()[0], self.as_bytes()[1]]
-    }
-}
-
-impl AsIndicator for String {
-    #[inline]
-    fn as_indicator(&self) -> Indicator {
-        assert_eq!(self[..].as_bytes().len(), 2);
-        [self[..].as_bytes()[0], self[..].as_bytes()[1]]
-    }
-}
-
-impl AsIndicator for Vec<u8> {
-    #[inline]
-    fn as_indicator(&self) -> Indicator {
-        assert_eq!(self.len(), 2);
-        [self[0], self[1]]
-    }
-}
-
-impl AsIndicator for [char; 2] {
-    fn as_indicator(&self) -> Indicator {
-        assert_eq!(self[0].len_utf8(), 1);
-        assert_eq!(self[1].len_utf8(), 1);
+impl From<[char; 2]> for Indicator {
+    fn from(bs: [char; 2]) -> Indicator {
+        assert_eq!(bs[0].len_utf8(), 1);
+        assert_eq!(bs[1].len_utf8(), 1);
         let mut dst = [0u8; 2];
-        self[0].encode_utf8(&mut dst);
-        self[1].encode_utf8(&mut dst[1..]);
-        dst
+        bs[0].encode_utf8(&mut dst);
+        bs[1].encode_utf8(&mut dst[1..]);
+        Indicator(dst)
     }
 }
 
-/// Entities that can be interpreted as `FieldRepr`.
-pub trait AsFieldRepr {
-    fn as_field_repr(&self) -> FieldRepr;
-}
-
-impl AsFieldRepr for FieldRepr {
-    #[inline]
-    fn as_field_repr(&self) -> FieldRepr {
-        self.clone()
+impl From<[u8; 2]> for Indicator {
+    fn from(bs: [u8; 2]) -> Indicator {
+        Indicator(bs)
     }
 }
 
-impl<'a> AsFieldRepr for Field<'a> {
-    #[inline]
-    fn as_field_repr(&self) -> FieldRepr {
-        (self.tag, self.data.to_owned())
+impl From<FieldRepr> for FieldRepr {
+    fn from(fr: FieldRepr) -> FieldRepr {
+        fr
     }
 }
 
-impl<'a, T: AsTag> AsFieldRepr for (T, &'a str) {
-    fn as_field_repr(&self) -> FieldRepr {
-        let tag = self.0.as_tag();
-        let mut data = self.1.as_bytes().to_owned();
-        data.push(FIELD_TERMINATOR);
-        (tag, data)
+impl<'a> From<Field<'a>> for FieldRepr {
+    fn from(Field {tag, data}: Field<'a>) -> FieldRepr {
+        (tag, data.to_owned())
     }
 }
 
-impl<'a, T: AsTag> AsFieldRepr for (T, &'a [u8]) {
-    fn as_field_repr(&self) -> FieldRepr {
-        let tag = self.0.as_tag();
-        let mut data = self.1.to_owned();
-        data.push(FIELD_TERMINATOR);
-        (tag, data)
+impl From<SubfieldRepr> for SubfieldRepr {
+    fn from(sr: SubfieldRepr) -> SubfieldRepr {
+        sr
     }
 }
 
-/// Entities that can be interpreted as `SubfieldRepr`
-pub trait AsSubfieldRepr {
-    fn as_subfield_repr(&self) -> SubfieldRepr;
-}
-
-impl AsSubfieldRepr for SubfieldRepr {
-    #[inline]
-    fn as_subfield_repr(&self) -> SubfieldRepr {
-        self.clone()
-    }
-}
-
-impl<'a> AsSubfieldRepr for Subfield<'a> {
-    #[inline]
-    fn as_subfield_repr(&self) -> SubfieldRepr {
-        (self.ident, self.data.to_owned())
-    }
-}
-
-impl<'a, T: AsIdentifier> AsSubfieldRepr for (T, &'a str) {
-    fn as_subfield_repr(&self) -> SubfieldRepr {
-        let ident = self.0.as_identifier();
-        let mut data = Vec::with_capacity(self.1.len() + 2);
-        data.push(SUBFIELD_DELIMITER);
-        data.push(ident);
-        data.push_all(self.1.as_bytes());
-        (ident, data)
+impl<'a> From<Subfield<'a>> for SubfieldRepr {
+    fn from(sf: Subfield<'a>) -> SubfieldRepr {
+        (sf.ident, sf.data.to_owned())
     }
 }
 
@@ -426,7 +358,7 @@ trait MrcReadInternal: io::Read {
         try!(read_exact!(self, tag, 3, "Unexpected EOF while reading directory entry"));
         let field_len = try!(self.read_dec_num(4));
         let start_pos = try!(self.read_dec_num(5));
-        Ok((tag, field_len, start_pos))
+        Ok((Tag(tag), field_len, start_pos))
     }
 }
 
@@ -527,7 +459,7 @@ impl<'a> Field<'a> {
         let end = begin + entry.1 as usize;
         Field {
             data: &rec.data[begin..end],
-            tag: entry.0,
+            tag: entry.0.clone(),
         }
     }
 
@@ -544,10 +476,10 @@ impl<'a> Field<'a> {
     }
 
     /// Returns subfields with identifier `ident` or empty vec if no such subfields.
-    pub fn get_subfield<'f, T: AsIdentifier>(&'f self, ident: T) -> Vec<Subfield<'f>> {
+    pub fn get_subfield<'f, T: Into<Identifier>>(&'f self, ident: T) -> Vec<Subfield<'f>> {
         let mut res = Vec::new();
         if self.is_data_field() && self.data.len() > 2 {
-            let ident = ident.as_identifier();
+            let ident = ident.into();
             let mut start = None;
             for (i, &x) in self.data.iter().enumerate() {
                 if i < 2 {
@@ -555,7 +487,7 @@ impl<'a> Field<'a> {
                 }
                 if start.is_none() {
                     if self.data[i-1] == SUBFIELD_DELIMITER {
-                        if x.as_identifier() == ident {
+                        if x.into() == ident {
                             start = Some(i - 1);
                         }
                     }
@@ -563,7 +495,7 @@ impl<'a> Field<'a> {
                     if x == SUBFIELD_DELIMITER || x == FIELD_TERMINATOR {
                         res.push(Subfield {
                             data: &self.data[start.unwrap()..i],
-                            tag: self.tag,
+                            tag: self.tag.clone(),
                             ident: ident,
                         });
                         start = None
@@ -582,9 +514,9 @@ impl<'a> Field<'a> {
 
     /// Returns indictor of data field or `None` if self is control field.
     #[inline]
-    pub fn get_indicator<T: FromIndicator>(&self) -> Option<T> {
+    pub fn get_indicator<T: From<Indicator>>(&self) -> Option<T> {
         if self.is_data_field() {
-            Some(FromIndicator::from_indicator([self.data[0], self.data[1]]))
+            Some(From::from([self.data[0], self.data[1]].into()))
         } else {
             None
         }
@@ -602,8 +534,8 @@ impl<'a> Field<'a> {
 
     /// Returns tag of a field.
     #[inline]
-    pub fn get_tag<T: FromTag + ?Sized>(&self) -> &T {
-        FromTag::from_tag(&self.tag)
+    pub fn get_tag<T: From<&'a Tag>>(&'a self) -> T {
+        From::from(&self.tag)
     }
 }
 
@@ -652,7 +584,7 @@ impl<'a> Iterator for Subfields<'a> {
                 }
                 if x == SUBFIELD_DELIMITER {
                     self.start = Some(self.offset+i);
-                    self.ident = Some(self.field.data[self.offset+i+1]);
+                    self.ident = Some(self.field.data[self.offset+i+1].into());
                     self.offset += i + 1;
                     break;
                 } else if x == FIELD_TERMINATOR {
@@ -669,7 +601,7 @@ impl<'a> Iterator for Subfields<'a> {
                     self.remain -= 1;
                     subfield = Some(Subfield {
                         data: &self.field.data[start..start+i+1],
-                        tag: self.field.tag,
+                        tag: self.field.tag.clone(),
                         ident: self.ident.take().unwrap(),
                     });
                     break;
@@ -696,8 +628,8 @@ pub struct Subfield<'a> {
 impl<'a> Subfield<'a> {
     /// Returns identifier of a subfield.
     #[inline]
-    pub fn get_identifier<T: FromIdentifier>(&self) -> T {
-        FromIdentifier::from_identifier(self.ident)
+    pub fn get_identifier<T: From<Identifier>>(&self) -> T {
+        From::from(self.ident)
     }
 
     /// Returns data of a subfield.
@@ -712,8 +644,8 @@ impl<'a> Subfield<'a> {
 
     /// Returns tag of a field `self` belongs to.
     #[inline]
-    pub fn get_tag<T: FromTag + ?Sized>(&self) -> &T {
-        FromTag::from_tag(&self.tag)
+    pub fn get_tag<T: From<&'a Tag>>(&'a self) -> T {
+        From::from(&self.tag)
     }
 }
 
@@ -727,10 +659,10 @@ pub struct DataFieldBuilder {
 
 impl DataFieldBuilder {
     pub fn new<T, I, S>(tag: T, indicator: I, subfield: S) -> DataFieldBuilder
-    where T: AsTag, I: AsIndicator, S: AsSubfieldRepr {
-        let tag = tag.as_tag();
-        let indicator = indicator.as_indicator();
-        let subfield = subfield.as_subfield_repr();
+    where T: Into<Tag> + Clone, I: Into<Indicator>, S: Into<SubfieldRepr> {
+        let tag = tag.clone().into();
+        let indicator = indicator.into();
+        let subfield = subfield.into();
         let mut res = DataFieldBuilder {
             tag: tag,
             indicator: indicator,
@@ -740,8 +672,8 @@ impl DataFieldBuilder {
         res.subfields.insert(0, subfield);
         res
     }
-    pub fn add_subfield<T: AsSubfieldRepr>(mut self, subfield: T) -> DataFieldBuilder {
-        let subfield = subfield.as_subfield_repr();
+    pub fn add_subfield<T: Into<SubfieldRepr>>(mut self, subfield: T) -> DataFieldBuilder {
+        let subfield = subfield.into();
         self.size += subfield.1.len() as u32;
         let mut index = 0;
         for (i, sf) in self.subfields.iter().enumerate() {
@@ -754,8 +686,8 @@ impl DataFieldBuilder {
         self
     }
     /// Removes all subfields with identifier `ident`.
-    pub fn remove_subfield<T: AsIdentifier>(mut self, ident: T) -> DataFieldBuilder {
-        let ident = ident.as_identifier();
+    pub fn remove_subfield<T: Into<Identifier>>(mut self, ident: T) -> DataFieldBuilder {
+        let ident = ident.into();
         self.subfields.retain(|subfield| {
             subfield.0 != ident
         });
@@ -764,9 +696,9 @@ impl DataFieldBuilder {
     pub fn into_field_repr(self) -> FieldRepr {
         let tag = self.tag;
         let mut data = Vec::with_capacity(self.size as usize);
-        data.push_all(&self.indicator);
+        data.push_all(self.indicator.borrow());
         for (ident, mut subfiled_data) in self.subfields.into_iter() {
-            data.push(ident);
+            data.push(ident.into());
             data.append(&mut subfiled_data);
         }
         data.push(FIELD_TERMINATOR);
@@ -853,8 +785,8 @@ impl RecordBuilder {
     pub fn set_multipart_resource_record_level(mut self, x: MultipartResourceRecordLevel) -> RecordBuilder {
         self.multipart_resource_record_level = x; self
     }
-    pub fn add_field<T: AsFieldRepr>(mut self, def: T) -> RecordBuilder {
-        let repr = def.as_field_repr();
+    pub fn add_field<T: Into<FieldRepr>>(mut self, def: T) -> RecordBuilder {
+        let repr = def.into();
         let mut index = 0;
         self.size += repr.1.len() as u32 + 12;
         for (i, f) in self.fields.iter().enumerate() {
@@ -867,8 +799,8 @@ impl RecordBuilder {
         self
     }
     /// Removes all fields with tag `tag`.
-    pub fn remove_field<T: AsTag>(mut self, tag: T) -> RecordBuilder {
-        let tag = tag.as_tag();
+    pub fn remove_field<T: Into<Tag> + Clone>(mut self, tag: T) -> RecordBuilder {
+        let tag = tag.into();
         self.fields.retain(|field| {
             field.0 != tag
         });
@@ -898,7 +830,7 @@ impl RecordBuilder {
         ]);
         let mut offset = 0;
         for field_repr in self.fields.iter() {
-            let _ = io::Write::write_all(&mut data, &field_repr.0);
+            let _ = io::Write::write_all(&mut data, field_repr.0.borrow());
             let _ = data.write_dec_num(4, field_repr.1.len() as u32);
             let _ = data.write_dec_num(5, offset);
             offset += field_repr.1.len() as u32;
@@ -1007,8 +939,8 @@ impl Record {
     }
 
     /// Returns fileds with tag `tag` or empty vec if no such fields.
-    pub fn get_field<'r, T: AsTag>(&'r self, tag: T) -> Vec<Field<'r>> {
-        let tag = AsTag::as_tag(&tag);
+    pub fn get_field<'r, T: Into<Tag> + Clone>(&'r self, tag: T) -> Vec<Field<'r>> {
+        let tag = tag.into();
         let mut field = Vec::new();
         for x in self.directory_entryes.as_ref().unwrap().iter() {
             if x.0 == tag {
@@ -1196,23 +1128,23 @@ mod tests {
                 assert_eq!(hint.0, *hint.1.as_ref().unwrap());
                 assert_eq!(hint.0, FIELDS_COUNT - count);
                 match count {
-                    01 => assert_eq!(field.get_tag::<str>(), "001"),
-                    02 => assert_eq!(field.get_tag::<str>(), "003"),
-                    03 => assert_eq!(field.get_tag::<str>(), "003"),
-                    04 => assert_eq!(field.get_tag::<str>(), "005"),
-                    05 => assert_eq!(field.get_tag::<str>(), "008"),
-                    06 => assert_eq!(field.get_tag::<str>(), "035"),
-                    07 => assert_eq!(field.get_tag::<str>(), "040"),
-                    08 => assert_eq!(field.get_tag::<str>(), "041"),
-                    09 => assert_eq!(field.get_tag::<str>(), "072"),
-                    10 => assert_eq!(field.get_tag::<str>(), "100"),
-                    11 => assert_eq!(field.get_tag::<str>(), "245"),
-                    12 => assert_eq!(field.get_tag::<str>(), "260"),
-                    13 => assert_eq!(field.get_tag::<str>(), "300"),
-                    14 => assert_eq!(field.get_tag::<str>(), "650"),
-                    15 => assert_eq!(field.get_tag::<str>(), "856"),
-                    16 => assert_eq!(field.get_tag::<str>(), "979"),
-                    17 => assert_eq!(field.get_tag::<str>(), "979"),
+                    01 => assert_eq!(field.get_tag(), "001"),
+                    02 => assert_eq!(field.get_tag(), "003"),
+                    03 => assert_eq!(field.get_tag(), "003"),
+                    04 => assert_eq!(field.get_tag(), "005"),
+                    05 => assert_eq!(field.get_tag(), "008"),
+                    06 => assert_eq!(field.get_tag(), "035"),
+                    07 => assert_eq!(field.get_tag(), "040"),
+                    08 => assert_eq!(field.get_tag(), "041"),
+                    09 => assert_eq!(field.get_tag(), "072"),
+                    10 => assert_eq!(field.get_tag(), "100"),
+                    11 => assert_eq!(field.get_tag(), "245"),
+                    12 => assert_eq!(field.get_tag(), "260"),
+                    13 => assert_eq!(field.get_tag(), "300"),
+                    14 => assert_eq!(field.get_tag(), "650"),
+                    15 => assert_eq!(field.get_tag(), "856"),
+                    16 => assert_eq!(field.get_tag(), "979"),
+                    17 => assert_eq!(field.get_tag(), "979"),
                     _ => assert!(false),
                 }
             }
@@ -1224,9 +1156,9 @@ mod tests {
             assert_eq!(rec.get_field("001").len(), 1);
             assert!(rec.get_field("001")[0].is_control_field());
             assert_eq!(rec.get_field("001")[0].data, b"000000001\x1e");
-            assert_eq!(rec.get_field("001")[0].get_tag::<[u8]>(), b"001");
+            assert_eq!(rec.get_field("001")[0].get_tag(), &b"001"[..]);
             assert_eq!(rec.get_field("001")[0].get_data(), Some(&b"000000001"[..]));
-            assert_eq!(rec.get_field("001")[0].get_tag::<str>(), "001");
+            assert_eq!(rec.get_field("001")[0].get_tag(), "001");
             assert_eq!(rec.get_field("001")[0].get_data(), Some("000000001"));
         }
 
@@ -1236,15 +1168,15 @@ mod tests {
             assert_eq!(rec.get_field("003").len(), 2);
             assert!(rec.get_field("003")[0].is_control_field());
             assert_eq!(rec.get_field("003")[0].data, b"RuMoRGB\x1e");
-            assert_eq!(rec.get_field("003")[0].get_tag::<[u8]>(), b"003");
+            assert_eq!(rec.get_field("003")[0].get_tag(), &b"003"[..]);
             assert_eq!(rec.get_field("003")[0].get_data(), Some(&b"RuMoRGB"[..]));
-            assert_eq!(rec.get_field("003")[0].get_tag::<str>(), "003");
+            assert_eq!(rec.get_field("003")[0].get_tag(), "003");
             assert_eq!(rec.get_field("003")[0].get_data(), Some("RuMoRGB"));
             assert!(rec.get_field("003")[1].is_control_field());
             assert_eq!(rec.get_field("003")[1].data, b"EnMoRGB\x1e");
-            assert_eq!(rec.get_field("003")[1].get_tag::<[u8]>(), b"003");
+            assert_eq!(rec.get_field("003")[1].get_tag(), &b"003"[..]);
             assert_eq!(rec.get_field("003")[1].get_data(), Some(&b"EnMoRGB"[..]));
-            assert_eq!(rec.get_field("003")[1].get_tag::<str>(), "003");
+            assert_eq!(rec.get_field("003")[1].get_tag(), "003");
             assert_eq!(rec.get_field("003")[1].get_data(), Some("EnMoRGB"));
         }
 
@@ -1253,7 +1185,7 @@ mod tests {
             let rec = RECS.as_bytes().read_record().unwrap().unwrap();
             assert_eq!(rec.get_field("856").len(), 1);
             assert!(rec.get_field("856")[0].is_data_field());
-            assert_eq!(rec.get_field("856")[0].get_tag::<str>(), "856");
+            assert_eq!(rec.get_field("856")[0].get_tag(), "856");
             assert_eq!(rec.get_field("856")[0].data, &b"41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e"[..]);
             assert_eq!(rec.get_field("856")[0].get_indicator(), Some(['4', '1']));
         }
@@ -1263,11 +1195,11 @@ mod tests {
             let rec = RECS.as_bytes().read_record().unwrap().unwrap();
             assert_eq!(rec.get_field("979").len(), 2);
             assert!(rec.get_field("979")[0].is_data_field());
-            assert_eq!(rec.get_field("979")[0].get_tag::<str>(), "979");
+            assert_eq!(rec.get_field("979")[0].get_tag(), "979");
             assert_eq!(rec.get_field("979")[0].data, b"  \x1faautoref\x1e");
             assert_eq!(rec.get_field("979")[0].get_indicator(), Some([' ', ' ']));
             assert!(rec.get_field("979")[1].is_data_field());
-            assert_eq!(rec.get_field("979")[1].get_tag::<str>(), "979");
+            assert_eq!(rec.get_field("979")[1].get_tag(), "979");
             assert_eq!(rec.get_field("979")[1].data, b"  \x1fbautoreg\x1fbautoreh\x1e");
             assert_eq!(rec.get_field("979")[1].get_indicator(), Some([' ', ' ']));
         }
@@ -1325,7 +1257,7 @@ mod tests {
             let ref field = rec.get_field("979")[0];
             assert_eq!(field.get_subfield('a').len(), 1);
             assert_eq!(field.get_subfield('a')[0].data, b"\x1faautoref");
-            assert_eq!(field.get_subfield('a')[0].get_tag::<str>(), "979");
+            assert_eq!(field.get_subfield('a')[0].get_tag(), "979");
             assert_eq!(field.get_subfield('a')[0].get_identifier(), 'a');
             assert_eq!(field.get_subfield('a')[0].get_data(), Some("autoref"));
         }
@@ -1336,11 +1268,11 @@ mod tests {
             let ref field = rec.get_field("979")[1];
             assert_eq!(field.get_subfield('b').len(), 2);
             assert_eq!(field.get_subfield('b')[0].data, b"\x1fbautoreg");
-            assert_eq!(field.get_subfield('b')[0].get_tag::<str>(), "979");
+            assert_eq!(field.get_subfield('b')[0].get_tag(), "979");
             assert_eq!(field.get_subfield('b')[0].get_identifier(), 'b');
             assert_eq!(field.get_subfield('b')[0].get_data(), Some("autoreg"));
             assert_eq!(field.get_subfield('b')[1].data, b"\x1fbautoreh");
-            assert_eq!(field.get_subfield('b')[1].get_tag::<str>(), "979");
+            assert_eq!(field.get_subfield('b')[1].get_tag(), "979");
             assert_eq!(field.get_subfield('b')[1].get_identifier(), 'b');
             assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
         }
