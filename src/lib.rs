@@ -371,7 +371,7 @@ pub trait MrcRead: io::Read {
         unsafe {
             rec.get_mut().set_len(5);
         }
-        match read_exact!(self, rec.get_mut().as_mut_slice(), 5) {
+        match read_exact!(self, &mut rec.get_mut()[..], 5) {
             Ok(0) => return Ok(None),
             Ok(x) if x < 5 => return Err(io::Error::new(io::ErrorKind::Other,
                                                         "Unexpected EOF while reading record length",
