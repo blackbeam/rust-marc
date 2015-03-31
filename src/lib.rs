@@ -447,7 +447,7 @@ impl<'a> Field<'a> {
     pub fn get_subfield<'f, T: Into<Identifier>>(&'f self, ident: T) -> Vec<Subfield<'f>> {
         let mut res = Vec::new();
         if self.is_data_field() && self.data.len() > 2 {
-            let ident = ident.into();
+            let ident: Identifier = ident.into();
             let mut start = None;
             for (i, &x) in self.data.iter().enumerate() {
                 if i < 2 {
@@ -455,7 +455,7 @@ impl<'a> Field<'a> {
                 }
                 if start.is_none() {
                     if self.data[i-1] == SUBFIELD_DELIMITER {
-                        if x.into() == ident {
+                        if x == ident.into() {
                             start = Some(i - 1);
                         }
                     }
