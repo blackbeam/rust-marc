@@ -296,12 +296,7 @@ trait MrcReadInternal: io::Read {
     #[inline]
     fn read_leader_field<T: LeaderField>(&mut self) -> io::Result<T> {
         let mut buf = [0u8];
-        match self.read(&mut buf) {
-            Ok(_) => (),
-            Err(_) => return Err(io::Error::new(io::ErrorKind::Other,
-                                                "Unexpected EOF while reading leader field",
-                                                None))
-        }
+        try!(read_exact!(self, buf, 1, "Unexpected EOF while reading leader field"));
         Ok(T::from_byte(buf[0]))
     }
     fn read_dec_num(&mut self, len: u8) -> io::Result<u32> {
