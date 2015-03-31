@@ -149,18 +149,18 @@ impl From<Identifier> for char {
     }
 }
 
-impl Into<Identifier> for char {
-    fn into(self) -> Identifier {
-        assert_eq!(self.len_utf8(), 1);
-        let mut dst = [0u8];
-        self.encode_utf8(&mut dst);
-        Identifier(dst[0])
+impl From<u8> for Identifier {
+    fn from(x: u8) -> Identifier {
+        Identifier(x)
     }
 }
 
-impl Into<Identifier> for u8 {
-    fn into(self) -> Identifier {
-        Identifier(self)
+impl From<char> for Identifier {
+    fn from(x: char) -> Identifier {
+        assert_eq!(x.len_utf8(), 1);
+        let mut dst = [0u8];
+        x.encode_utf8(&mut dst);
+        Identifier(dst[0])
     }
 }
 
