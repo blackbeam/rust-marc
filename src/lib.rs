@@ -248,29 +248,6 @@ macro_rules! read_exact(
             Err(e) => Err(e),
         }
     });
-    ($source:expr, $dest:expr, $count:expr) => ({
-        let mut rc = $count;
-        let mut err = None;
-        loop {
-            match $source.read(&mut $dest[($count - rc)..rc]) {
-                Ok(c) => {
-                    rc -= c;
-                    if rc == 0 || c == 0 {
-                        break;
-                    }
-                },
-                Err(e) => {
-                    err = Some(e);
-                    break;
-                }
-            }
-        }
-        if err.is_none() {
-            Ok($count - rc)
-        } else {
-            Err(err.unwrap())
-        }
-    });
     ($source:expr, $dest:expr, $count:expr, $edesc:expr) => ({
         let mut rc = $count;
         let mut err = None;
@@ -368,11 +345,8 @@ impl<T: io::Read + ?Sized> MrcReadInternal for T {}
 pub trait MrcRead: io::Read {
     fn read_record(&mut self) -> io::Result<Option<Record>> {
         let mut rec = io::Cursor::new(Vec::with_capacity(5));
-        unsafe {
-            rec.get_mut().set_len(5);
-        }
-        match read_exact!(self, &mut rec.get_mut()[..], 5) {
-            Ok(0) => return Ok(None),
+
+        match self.take(5).read_to_end(rec.get_mut()) {
             Ok(x) if x < 5 => return Err(io::Error::new(io::ErrorKind::Other,
                                                         "Unexpected EOF while reading record length",
                                                         None)),
@@ -388,13 +362,12 @@ pub trait MrcRead: io::Read {
         }
 
         rec.get_mut().reserve(record_length as usize - 5);
-        unsafe {
-            rec.get_mut().set_len(record_length as usize);
-        }
-        match read_exact!(self, &mut rec.get_mut()[5..], record_length as usize - 5) {
-            Ok(x) if x < record_length as usize - 5 => return Err(io::Error::new(io::ErrorKind::Other,
-                                                              "Unexpected EOF while reading record",
-                                                              None)),
+        match self.take(record_length as u64 - 5).read_to_end(rec.get_mut()) {
+            Ok(x) if x < record_length as usize - 5 => {
+                return Err(io::Error::new(io::ErrorKind::Other,
+                                          "Unexpected EOF while reading record",
+                                          None))
+            },
             Err(e) => return Err(e),
             _ => (),
         }
