@@ -1096,23 +1096,23 @@ mod tests {
                 assert_eq!(hint.0, *hint.1.as_ref().unwrap());
                 assert_eq!(hint.0, FIELDS_COUNT - count);
                 match count {
-                    01 => assert_eq!(field.get_tag(), "001"),
-                    02 => assert_eq!(field.get_tag(), "003"),
-                    03 => assert_eq!(field.get_tag(), "003"),
-                    04 => assert_eq!(field.get_tag(), "005"),
-                    05 => assert_eq!(field.get_tag(), "008"),
-                    06 => assert_eq!(field.get_tag(), "035"),
-                    07 => assert_eq!(field.get_tag(), "040"),
-                    08 => assert_eq!(field.get_tag(), "041"),
-                    09 => assert_eq!(field.get_tag(), "072"),
-                    10 => assert_eq!(field.get_tag(), "100"),
-                    11 => assert_eq!(field.get_tag(), "245"),
-                    12 => assert_eq!(field.get_tag(), "260"),
-                    13 => assert_eq!(field.get_tag(), "300"),
-                    14 => assert_eq!(field.get_tag(), "650"),
-                    15 => assert_eq!(field.get_tag(), "856"),
-                    16 => assert_eq!(field.get_tag(), "979"),
-                    17 => assert_eq!(field.get_tag(), "979"),
+                    01 => assert_eq!(Some(field.get_tag()), Some("001")),
+                    02 => assert_eq!(Some(field.get_tag()), Some("003")),
+                    03 => assert_eq!(Some(field.get_tag()), Some("003")),
+                    04 => assert_eq!(Some(field.get_tag()), Some("005")),
+                    05 => assert_eq!(Some(field.get_tag()), Some("008")),
+                    06 => assert_eq!(Some(field.get_tag()), Some("035")),
+                    07 => assert_eq!(Some(field.get_tag()), Some("040")),
+                    08 => assert_eq!(Some(field.get_tag()), Some("041")),
+                    09 => assert_eq!(Some(field.get_tag()), Some("072")),
+                    10 => assert_eq!(Some(field.get_tag()), Some("100")),
+                    11 => assert_eq!(Some(field.get_tag()), Some("245")),
+                    12 => assert_eq!(Some(field.get_tag()), Some("260")),
+                    13 => assert_eq!(Some(field.get_tag()), Some("300")),
+                    14 => assert_eq!(Some(field.get_tag()), Some("650")),
+                    15 => assert_eq!(Some(field.get_tag()), Some("856")),
+                    16 => assert_eq!(Some(field.get_tag()), Some("979")),
+                    17 => assert_eq!(Some(field.get_tag()), Some("979")),
                     _ => assert!(false),
                 }
             }
@@ -1124,9 +1124,9 @@ mod tests {
             assert_eq!(rec.get_field("001").len(), 1);
             assert!(rec.get_field("001")[0].is_control_field());
             assert_eq!(rec.get_field("001")[0].data, b"000000001\x1e");
-            assert_eq!(rec.get_field("001")[0].get_tag(), &b"001"[..]);
+            assert_eq!(Some(rec.get_field("001")[0].get_tag()), Some(&b"001"[..]));
             assert_eq!(rec.get_field("001")[0].get_data(), Some(&b"000000001"[..]));
-            assert_eq!(rec.get_field("001")[0].get_tag(), "001");
+            assert_eq!(Some(rec.get_field("001")[0].get_tag()), Some("001"));
             assert_eq!(rec.get_field("001")[0].get_data(), Some("000000001"));
         }
 
@@ -1136,15 +1136,15 @@ mod tests {
             assert_eq!(rec.get_field("003").len(), 2);
             assert!(rec.get_field("003")[0].is_control_field());
             assert_eq!(rec.get_field("003")[0].data, b"RuMoRGB\x1e");
-            assert_eq!(rec.get_field("003")[0].get_tag(), &b"003"[..]);
+            assert_eq!(Some(rec.get_field("003")[0].get_tag()), Some(&b"003"[..]));
             assert_eq!(rec.get_field("003")[0].get_data(), Some(&b"RuMoRGB"[..]));
-            assert_eq!(rec.get_field("003")[0].get_tag(), "003");
+            assert_eq!(Some(rec.get_field("003")[0].get_tag()), Some("003"));
             assert_eq!(rec.get_field("003")[0].get_data(), Some("RuMoRGB"));
             assert!(rec.get_field("003")[1].is_control_field());
             assert_eq!(rec.get_field("003")[1].data, b"EnMoRGB\x1e");
-            assert_eq!(rec.get_field("003")[1].get_tag(), &b"003"[..]);
+            assert_eq!(Some(rec.get_field("003")[1].get_tag()), Some(&b"003"[..]));
             assert_eq!(rec.get_field("003")[1].get_data(), Some(&b"EnMoRGB"[..]));
-            assert_eq!(rec.get_field("003")[1].get_tag(), "003");
+            assert_eq!(Some(rec.get_field("003")[1].get_tag()), Some("003"));
             assert_eq!(rec.get_field("003")[1].get_data(), Some("EnMoRGB"));
         }
 
@@ -1153,7 +1153,7 @@ mod tests {
             let rec = RECS.as_bytes().read_record().unwrap().unwrap();
             assert_eq!(rec.get_field("856").len(), 1);
             assert!(rec.get_field("856")[0].is_data_field());
-            assert_eq!(rec.get_field("856")[0].get_tag(), "856");
+            assert_eq!(Some(rec.get_field("856")[0].get_tag()), Some("856"));
             assert_eq!(rec.get_field("856")[0].data, &b"41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e"[..]);
             assert_eq!(rec.get_field("856")[0].get_indicator(), Some(['4', '1']));
         }
@@ -1163,11 +1163,11 @@ mod tests {
             let rec = RECS.as_bytes().read_record().unwrap().unwrap();
             assert_eq!(rec.get_field("979").len(), 2);
             assert!(rec.get_field("979")[0].is_data_field());
-            assert_eq!(rec.get_field("979")[0].get_tag(), "979");
+            assert_eq!(Some(rec.get_field("979")[0].get_tag()), Some("979"));
             assert_eq!(rec.get_field("979")[0].data, b"  \x1faautoref\x1e");
             assert_eq!(rec.get_field("979")[0].get_indicator(), Some([' ', ' ']));
             assert!(rec.get_field("979")[1].is_data_field());
-            assert_eq!(rec.get_field("979")[1].get_tag(), "979");
+            assert_eq!(Some(rec.get_field("979")[1].get_tag()), Some("979"));
             assert_eq!(rec.get_field("979")[1].data, b"  \x1fbautoreg\x1fbautoreh\x1e");
             assert_eq!(rec.get_field("979")[1].get_indicator(), Some([' ', ' ']));
         }
@@ -1225,7 +1225,7 @@ mod tests {
             let ref field = rec.get_field("979")[0];
             assert_eq!(field.get_subfield('a').len(), 1);
             assert_eq!(field.get_subfield('a')[0].data, b"\x1faautoref");
-            assert_eq!(field.get_subfield('a')[0].get_tag(), "979");
+            assert_eq!(Some(field.get_subfield('a')[0].get_tag()), Some("979"));
             assert_eq!(field.get_subfield('a')[0].get_identifier(), 'a');
             assert_eq!(field.get_subfield('a')[0].get_data(), Some("autoref"));
         }
@@ -1236,11 +1236,11 @@ mod tests {
             let ref field = rec.get_field("979")[1];
             assert_eq!(field.get_subfield('b').len(), 2);
             assert_eq!(field.get_subfield('b')[0].data, b"\x1fbautoreg");
-            assert_eq!(field.get_subfield('b')[0].get_tag(), "979");
+            assert_eq!(Some(field.get_subfield('b')[0].get_tag()), Some("979"));
             assert_eq!(field.get_subfield('b')[0].get_identifier(), 'b');
             assert_eq!(field.get_subfield('b')[0].get_data(), Some("autoreg"));
             assert_eq!(field.get_subfield('b')[1].data, b"\x1fbautoreh");
-            assert_eq!(field.get_subfield('b')[1].get_tag(), "979");
+            assert_eq!(Some(field.get_subfield('b')[1].get_tag()), Some("979"));
             assert_eq!(field.get_subfield('b')[1].get_identifier(), 'b');
             assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
         }
