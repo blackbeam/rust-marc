@@ -342,6 +342,7 @@ pub trait MrcRead: io::Read {
         let mut rec = io::Cursor::new(Vec::with_capacity(5));
 
         match self.take(5).read_to_end(rec.get_mut()) {
+            Ok(0) => return Ok(None),
             Ok(x) if x < 5 => return Err(io::Error::new(io::ErrorKind::Other,
                                                         "Unexpected EOF while reading record length",
                                                         None)),
