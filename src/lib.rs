@@ -1169,7 +1169,7 @@ mod tests {
                 assert_eq!(hint.0, 0);
                 match count {
                     01 => {
-                        assert_eq!(subfield.get_identifier(), 'a');
+                        assert_eq!(subfield.get_identifier::<char>(), 'a');
                         assert_eq!(subfield.get_data(), Some("autoref"));
                     },
                     _ => assert!(false),
@@ -1188,11 +1188,11 @@ mod tests {
                 assert_eq!(hint.0, 2 - count);
                 match count {
                     01 => {
-                        assert_eq!(subfield.get_identifier(), 'b');
+                        assert_eq!(subfield.get_identifier::<char>(), 'b');
                         assert_eq!(subfield.get_data(), Some("autoreg"));
                     },
                     02 => {
-                        assert_eq!(subfield.get_identifier(), 'b');
+                        assert_eq!(subfield.get_identifier::<char>(), 'b');
                         assert_eq!(subfield.get_data(), Some("autoreh"));
                     },
                     _ => assert!(false),
@@ -1207,7 +1207,7 @@ mod tests {
             assert_eq!(field.get_subfield('a').len(), 1);
             assert_eq!(field.get_subfield('a')[0].data, b"\x1faautoref");
             assert_eq!(Some(field.get_subfield('a')[0].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('a')[0].get_identifier(), 'a');
+            assert_eq!(field.get_subfield('a')[0].get_identifier::<char>(), 'a');
             assert_eq!(field.get_subfield('a')[0].get_data(), Some("autoref"));
         }
 
@@ -1218,11 +1218,11 @@ mod tests {
             assert_eq!(field.get_subfield('b').len(), 2);
             assert_eq!(field.get_subfield('b')[0].data, b"\x1fbautoreg");
             assert_eq!(Some(field.get_subfield('b')[0].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('b')[0].get_identifier(), 'b');
+            assert_eq!(field.get_subfield('b')[0].get_identifier::<char>(), 'b');
             assert_eq!(field.get_subfield('b')[0].get_data(), Some("autoreg"));
             assert_eq!(field.get_subfield('b')[1].data, b"\x1fbautoreh");
             assert_eq!(Some(field.get_subfield('b')[1].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('b')[1].get_identifier(), 'b');
+            assert_eq!(field.get_subfield('b')[1].get_identifier::<char>(), 'b');
             assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
         }
 
