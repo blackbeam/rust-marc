@@ -1,4 +1,4 @@
-#![feature(io, collections, unicode, convert)]
+#![feature(collections, unicode)]
 #![cfg_attr(test, feature(test))]
 
 #[cfg(test)] extern crate test;
