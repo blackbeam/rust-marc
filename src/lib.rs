@@ -795,6 +795,18 @@ pub struct Record {
 }
 
 impl Record {
+    pub fn from_vec(data: Vec<u8>) -> io::Result<Record> {
+        let record_length = try!((&data[..]).read_dec_num(5));
+        if record_length as usize != data.len() {
+            return Err(Error::new(Other, "Vector length does not equals record length"));
+        }
+
+        if data[data.len() - 1] != RECORD_TERMINATOR {
+            return Err(Error::new(Other, "Record does not ends with record terminator"));
+        }
+
+        Record::from_data(data)
+    }
     fn from_data(data: Vec<u8>) -> io::Result<Record> {
         let mut rec = io::Cursor::new(data);
         let record_length = try!(rec.read_dec_num(5));
@@ -1039,6 +1051,16 @@ mod tests {
             assert_eq!(rec2.data.len(), 963);
             assert_eq!(rec2.data, &RECS.as_bytes()[rec1.data.len()..]);
             assert_eq!(None, recs.read_record().unwrap());
+        }
+
+        #[test]
+        fn from_vec() {
+            use std::borrow::ToOwned;
+
+            let vec = (& RECS.as_bytes()[0..963]).to_owned();
+            let rec = Record::from_vec(vec).unwrap();
+            assert_eq!(rec.data, &RECS.as_bytes()[0..rec.data.len()]);
+            assert_eq!(rec.data.len(), 963);
         }
 
         #[test]
