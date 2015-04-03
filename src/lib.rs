@@ -8,6 +8,8 @@ use std::borrow::ToOwned;
 use std::char;
 use std::io;
 use std::io::Read;
+use std::io::Error;
+use std::io::ErrorKind::Other;
 use std::slice;
 use std::str;
 
@@ -206,7 +208,7 @@ macro_rules! read_exact(
                 if c == 1 {
                     Ok(())
                 } else {
-                    Err(io::Error::new(io::ErrorKind::Other, $edesc, None))
+                    Err(Error::new(Other, $edesc))
                 }
             },
             Err(e) => Err(e),
@@ -221,7 +223,7 @@ macro_rules! read_exact(
                     if c == rc {
                         break;
                     } else if c == 0 {
-                        err = Some(io::Error::new(io::ErrorKind::Other, $edesc, None));
+                        err = Some(Error::new(Other, $edesc));
                         break
                     }
                     rc -= c;
@@ -271,9 +273,7 @@ trait MrcReadInternal: io::Read {
         let mut pos = len;
         for &i in &buf[..(len as usize)] {
             if b'0' > i || i > b'9' {
-                return Err(io::Error::new(io::ErrorKind::Other,
-                                          "Unexpected byte while reading decimal number",
-                                          None))
+                return Err(Error::new(Other, "Unexpected byte while reading decimal number"));
             }
             let mut x = (i - 0x30) as u32;
             if pos > 0 {
@@ -307,34 +307,28 @@ pub trait MrcRead: io::Read {
 
         match self.take(5).read_to_end(rec.get_mut()) {
             Ok(0) => return Ok(None),
-            Ok(x) if x < 5 => return Err(io::Error::new(io::ErrorKind::Other,
-                                                        "Unexpected EOF while reading record length",
-                                                        None)),
+            Ok(x) if x < 5 => {
+                return Err(Error::new(Other, "Unexpected EOF while reading record length"))
+            },
             Err(e) => return Err(e),
             _ => (),
         }
 
         let record_length = try!(rec.read_dec_num(5));
         if MIN_REC_LEN > record_length || record_length > MAX_REC_LEN {
-            return Err(io::Error::new(io::ErrorKind::Other,
-                                      "Record length is out of bounds",
-                                      None));
+            return Err(Error::new(Other, "Record length is out of bounds"));
         }
 
         rec.get_mut().reserve(record_length as usize - 5);
         match self.take(record_length as u64 - 5).read_to_end(rec.get_mut()) {
             Ok(x) if x < record_length as usize - 5 => {
-                return Err(io::Error::new(io::ErrorKind::Other,
-                                          "Unexpected EOF while reading record",
-                                          None))
+                return Err(Error::new(Other, "Unexpected EOF while reading record"));
             },
             Err(e) => return Err(e),
             _ => (),
         }
         if rec.get_ref()[rec.get_ref().len()-1] != RECORD_TERMINATOR {
-            return Err(io::Error::new(io::ErrorKind::Other,
-                                      "No record terminator",
-                                      None));
+            return Err(Error::new(Other, "No record terminator"));
         }
 
         let record = try!(Record::from_data(rec.into_inner()));
