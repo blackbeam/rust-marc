@@ -62,12 +62,6 @@ impl<'a> Borrow<[u8]> for FieldData<'a> {
     }
 }
 
-impl From<Tag> for Tag {
-    fn from(t: Tag) -> Tag {
-        t
-    }
-}
-
 impl<'a> From<&'a [u8]> for Tag {
     fn from(s: &'a [u8]) -> Tag {
         assert!(s.len() == 3, "Tag length != 3");
@@ -99,12 +93,6 @@ impl<'a> From<&'a Tag> for &'a [u8] {
     }
 }
 
-impl<'a> From<&'a Tag> for &'a Tag {
-    fn from(tag: &'a Tag) -> &'a Tag {
-        tag
-    }
-}
-
 impl<'a> From<&'a Tag> for [u8; 3] {
     fn from(tag: &'a Tag) -> [u8; 3] {
         let Tag(x) = tag.clone();
@@ -128,12 +116,6 @@ impl FromFieldData for str {
     #[inline]
     fn from_data(data: &[u8]) -> Option<&str> {
         str::from_utf8(data).ok()
-    }
-}
-
-impl From<Identifier> for Identifier {
-    fn from(ident: Identifier) -> Identifier {
-        ident
     }
 }
 
@@ -171,12 +153,6 @@ impl Borrow<[u8]> for Indicator {
     }
 }
 
-impl From<Indicator> for Indicator {
-    fn from(ind: Indicator) -> Indicator {
-        ind
-    }
-}
-
 impl From<Indicator> for [u8; 2] {
     fn from(Indicator(ind): Indicator) -> [u8; 2] {
         ind
@@ -206,21 +182,9 @@ impl From<[u8; 2]> for Indicator {
     }
 }
 
-impl From<FieldRepr> for FieldRepr {
-    fn from(fr: FieldRepr) -> FieldRepr {
-        fr
-    }
-}
-
 impl<'a> From<Field<'a>> for FieldRepr {
     fn from(Field {tag, data}: Field<'a>) -> FieldRepr {
         (tag, data.to_owned())
-    }
-}
-
-impl From<SubfieldRepr> for SubfieldRepr {
-    fn from(sr: SubfieldRepr) -> SubfieldRepr {
-        sr
     }
 }
 
