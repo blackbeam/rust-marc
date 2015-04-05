@@ -1,8 +1,3 @@
-#![feature(collections, unicode)]
-#![cfg_attr(test, feature(test))]
-
-#[cfg(test)] extern crate test;
-
 use std::borrow::Borrow;
 use std::borrow::ToOwned;
 use std::char;
@@ -142,9 +137,9 @@ impl From<u8> for Identifier {
 impl From<char> for Identifier {
     fn from(x: char) -> Identifier {
         assert_eq!(x.len_utf8(), 1);
-        let mut dst = [0u8];
-        x.encode_utf8(&mut dst);
-        Identifier(dst[0])
+        let mut dst = String::with_capacity(1);
+        dst.push(x);
+        Identifier(AsRef::<str>::as_ref(&dst).as_bytes()[0])
     }
 }
 
@@ -171,10 +166,11 @@ impl From<[char; 2]> for Indicator {
     fn from(bs: [char; 2]) -> Indicator {
         assert_eq!(bs[0].len_utf8(), 1);
         assert_eq!(bs[1].len_utf8(), 1);
-        let mut dst = [0u8; 2];
-        bs[0].encode_utf8(&mut dst);
-        bs[1].encode_utf8(&mut dst[1..]);
-        Indicator(dst)
+        let mut dst = String::with_capacity(2);
+        dst.push(bs[0]);
+        dst.push(bs[1]);
+        let bytes = AsRef::<str>::as_ref(&dst).as_bytes();
+        Indicator([bytes[0], bytes[1]])
     }
 }
 
@@ -623,10 +619,15 @@ impl DataFieldBuilder {
     pub fn into_field_repr(self) -> FieldRepr {
         let tag = self.tag;
         let mut data = Vec::with_capacity(self.size as usize);
-        data.push_all(self.indicator.borrow());
-        for (ident, mut subfiled_data) in self.subfields.into_iter() {
+        {
+            // XXX: Wait for Vec::push_all
+            let Indicator(ref ind) = self.indicator;
+            data.push(ind[0]);
+            data.push(ind[1])
+        }
+        for (ident, subfiled_data) in self.subfields.into_iter() {
             data.push(ident.into());
-            data.append(&mut subfiled_data);
+            data.extend(subfiled_data);
         }
         data.push(FIELD_TERMINATOR);
         (tag, data)
@@ -763,8 +764,8 @@ impl RecordBuilder {
             offset += field_repr.1.len() as u32;
         }
         data.push(FIELD_TERMINATOR);
-        for (_, mut field_data) in self.fields.into_iter() {
-            data.append(&mut field_data);
+        for (_, field_data) in self.fields.into_iter() {
+            data.extend(field_data);
         }
         data.push(RECORD_TERMINATOR);
         Record::from_data(data).unwrap()
@@ -1036,7 +1037,6 @@ mod tests {
                                 00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
     const FIELDS_COUNT: usize = 17;
     mod read {
-        use test;
         use super::RECS;
         use super::FIELDS_COUNT;
         use super::super::*;
@@ -1224,76 +1224,6 @@ mod tests {
             assert_eq!(Some(field.get_subfield('b')[1].get_tag()), Some("979"));
             assert_eq!(field.get_subfield('b')[1].get_identifier::<char>(), 'b');
             assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
-        }
-
-        #[bench]
-        fn read_record(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        test::black_box(rec);
-                    } else {
-                        assert!(false);
-                    }
-                }
-            });
-            b.bytes += RECS.as_bytes().len() as u64;
-        }
-
-        #[bench]
-        fn read_record_get_field(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        assert_eq!(rec.get_field("979").len(), 2);
-                    } else {
-                        assert!(false);
-                    }
-                }
-            });
-            b.bytes += RECS.as_bytes().len() as u64;
-        }
-
-        #[bench]
-        fn read_record_iter_fields(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        for field in rec.fields() {
-                            test::black_box(field);
-                        }
-                    } else {
-                        assert!(false);
-                    }
-                }
-            });
-            b.bytes += RECS.as_bytes().len() as u64;
-        }
-
-        #[bench]
-        fn read_record_iter_subfields(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        for field in rec.fields() {
-                            for subfield in field.subfields() {
-                                test::black_box(subfield);
-                            }
-                        }
-                    } else {
-                        assert!(false);
-                    }
-                }
-            });
-            b.bytes += RECS.as_bytes().len() as u64;
-        }
-
-        #[bench]
-        fn build_record_from_record(b: &mut test::Bencher) {
-            let record = RECS.as_bytes().read_record().unwrap().unwrap();
-            b.iter(|| {
-                test::black_box(RecordBuilder::from_record(&record));
-            })
         }
     }
 }
