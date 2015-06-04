@@ -334,6 +334,40 @@ pub trait MrcRead: io::Read {
 
 impl<T: io::Read + ?Sized> MrcRead for T {}
 
+/// Iterator over all records in provided `io::Read` implementer.
+#[derive(Debug)]
+pub struct Records<T>(T, bool);
+
+impl<T: io::Read> Records<T> {
+    /// Allows you to create an instance of `Records`.
+    pub fn new(src: T) -> Records<T> {
+        Records(src, false)
+    }
+}
+
+impl<T: io::Read> Iterator for Records<T> {
+    type Item = io::Result<Record>;
+
+    fn next(&mut self) -> Option<io::Result<Record>> {
+        let &mut Records(ref mut src, ref mut done) = self;
+        if *done {
+            None
+        } else {
+            match src.read_record() {
+                Ok(Some(record)) => Some(Ok(record)),
+                Ok(None) => {
+                    *done = true;
+                    None
+                },
+                Err(e) => {
+                    *done = true;
+                    Some(Err(e))
+                },
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Warning {
     WrongIndicatorCount(u8),
@@ -1051,6 +1085,26 @@ mod tests {
             assert_eq!(rec2.data.len(), 963);
             assert_eq!(rec2.data, &RECS.as_bytes()[rec1.data.len()..]);
             assert_eq!(None, recs.read_record().unwrap());
+        }
+
+        #[test]
+        fn records_iter() {
+            let recs = RECS.as_bytes();
+            let it = Records::new(recs);
+            for (i, record) in it.enumerate() {
+                let record = record.unwrap();
+                match i {
+                    0 => {
+                        assert_eq!(record.data, &RECS.as_bytes()[0..record.data.len()]);
+                        assert_eq!(record.data.len(), 963);
+                    },
+                    1 => {
+                        assert_eq!(record.data.len(), 963);
+                        assert_eq!(record.data, &RECS.as_bytes()[963..]);
+                    },
+                    _ => unreachable!(),
+                }
+            }
         }
 
         #[test]
