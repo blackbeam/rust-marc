@@ -1,3 +1,7 @@
+#![cfg_attr(feature = "nightly", feature(test))]
+#[cfg(feature = "nightly")]
+extern crate test;
+
 use std::borrow::Borrow;
 use std::borrow::ToOwned;
 use std::char;
@@ -1278,6 +1282,84 @@ mod tests {
             assert_eq!(Some(field.get_subfield('b')[1].get_tag()), Some("979"));
             assert_eq!(field.get_subfield('b')[1].get_identifier::<char>(), 'b');
             assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
+        }
+    }
+
+    #[cfg(feature = "nightly")]
+    mod bench {
+        use test;
+        use super::RECS;
+        use super::super::*;
+
+        #[bench]
+        fn read_record(b: &mut test::Bencher) {
+            b.iter(|| {
+                if let Ok(rec) = RECS.as_bytes().read_record() {
+                    if let Some(rec) = rec {
+                        test::black_box(rec);
+                    } else {
+                        assert!(false);
+                    }
+                }
+            });
+            b.bytes += RECS.as_bytes().len() as u64;
+        }
+
+        #[bench]
+        fn read_record_get_field(b: &mut test::Bencher) {
+            b.iter(|| {
+                if let Ok(rec) = RECS.as_bytes().read_record() {
+                    if let Some(rec) = rec {
+                        assert_eq!(rec.get_field("979").len(), 2);
+                    } else {
+                        assert!(false);
+                    }
+                }
+            });
+            b.bytes += RECS.as_bytes().len() as u64;
+        }
+
+        #[bench]
+        fn read_record_iter_fields(b: &mut test::Bencher) {
+            b.iter(|| {
+                if let Ok(rec) = RECS.as_bytes().read_record() {
+                    if let Some(rec) = rec {
+                        for field in rec.fields() {
+                            test::black_box(field);
+                        }
+                    } else {
+                        assert!(false);
+                    }
+                }
+            });
+            b.bytes += RECS.as_bytes().len() as u64;
+        }
+
+        #[bench]
+        fn read_record_iter_subfields(b: &mut test::Bencher) {
+            b.iter(|| {
+                if let Ok(rec) = RECS.as_bytes().read_record() {
+                    if let Some(rec) = rec {
+                        for field in rec.fields() {
+                            for subfield in field.subfields() {
+                                test::black_box(subfield);
+                            }
+                        }
+                    } else {
+                        assert!(false);
+                    }
+                }
+            });
+            b.bytes += RECS.as_bytes().len() as u64;
+        }
+
+        #[bench]
+        fn build_record_from_record(b: &mut test::Bencher)
+        {
+            let record = RECS.as_bytes().read_record().unwrap().unwrap();
+            b.iter(|| {
+                test::black_box(RecordBuilder::from_record(&record));
+            })
         }
     }
 }
