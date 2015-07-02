@@ -936,9 +936,13 @@ impl Record {
 
     fn parse_directory(&mut self) -> io::Result<()> {
         let mut directory_entryes_count = 0;
-        for i in 0..(self.data.len() - 24) {
-            if self.data[i] == FIELD_TERMINATOR {
-                directory_entryes_count = i / 12;
+        let mut j = 24;
+        while j < (self.data.len() - 24) {
+            if self.data[j] == FIELD_TERMINATOR {
+                break;
+            } else {
+                directory_entryes_count += 1;
+                j += 12;
             }
         }
         let mut directory_entryes = Vec::with_capacity(directory_entryes_count);
