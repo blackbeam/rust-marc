@@ -374,11 +374,11 @@ impl<T: io::Read> Iterator for Records<T> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Warning {
-    WrongIndicatorCount(u8),
-    WrongSubfieldCodeCount(u8),
-    WrongLengthOfFieldLen(u8),
-    WrongStartingCharacterPositionLen(u8),
-    WrongImplementationDefinedPortionLen(u8),
+    WrongIndicatorCount(Option<u8>),
+    WrongSubfieldCodeCount(Option<u8>),
+    WrongLengthOfFieldLen(Option<u8>),
+    WrongStartingCharacterPositionLen(Option<u8>),
+    WrongImplementationDefinedPortionLen(Option<u8>),
 }
 
 /// Iterator over fields of a record.
@@ -855,32 +855,61 @@ impl Record {
         let bibliographic_level = try!(rec.read_leader_field());
         let type_of_control = try!(rec.read_leader_field());
         let character_coding_scheme = try!(rec.read_leader_field());
-        let indicator_count = try!(rec.read_dec_num(1)) as u8;
-        if indicator_count != 2 {
-            warnings.push(Warning::WrongIndicatorCount(indicator_count));
-        }
-        let subfield_code_count = try!(rec.read_dec_num(1)) as u8;
-        if subfield_code_count != 2 {
-            warnings.push(Warning::WrongSubfieldCodeCount(subfield_code_count));
-        }
+
+        let indicator_count = if let Ok(ic) = rec.read_dec_num(1) {
+            if ic != 2 {
+                warnings.push(Warning::WrongIndicatorCount(Some(ic as u8)));
+            }
+            ic as u8
+        } else {
+            warnings.push(Warning::WrongIndicatorCount(None));
+            2
+        };
+
+        let subfield_code_count = if let Ok(scc) = rec.read_dec_num(1) {
+            if scc != 2 {
+                warnings.push(Warning::WrongSubfieldCodeCount(Some(scc as u8)));
+            }
+            scc as u8
+        } else {
+            warnings.push(Warning::WrongSubfieldCodeCount(None));
+            2
+        };
+
         let base_address_of_data = try!(rec.read_dec_num(5));
         let encoding_level = try!(rec.read_leader_field());
         let descriptive_cataloging_form = try!(rec.read_leader_field());
         let multipart_resource_record_level = try!(rec.read_leader_field());
-        let length_of_field_len = try!(rec.read_dec_num(1)) as u8;
-        if length_of_field_len != 4 {
-            warnings.push(Warning::WrongLengthOfFieldLen(length_of_field_len));
-        }
-        let starting_character_position_len = try!(rec.read_dec_num(1)) as u8;
-        if starting_character_position_len != 5 {
-            warnings.push(
-                Warning::WrongStartingCharacterPositionLen(starting_character_position_len));
-        }
-        let implementation_defined_portion_len = try!(rec.read_dec_num(1)) as u8;
-        if implementation_defined_portion_len != 0 {
-            warnings.push(
-                Warning::WrongImplementationDefinedPortionLen(implementation_defined_portion_len));
-        }
+
+        let length_of_field_len = if let Ok(lof) = rec.read_dec_num(1) {
+            if lof != 4 {
+                warnings.push(Warning::WrongLengthOfFieldLen(Some(lof as u8)));
+            }
+            lof as u8
+        } else {
+            warnings.push(Warning::WrongLengthOfFieldLen(None));
+            4
+        };
+
+        let starting_character_position_len = if let Ok(scp) = rec.read_dec_num(1) {
+            if scp != 5 {
+                warnings.push(Warning::WrongStartingCharacterPositionLen(Some(scp as u8)));
+            }
+            scp as u8
+        } else {
+            warnings.push(Warning::WrongStartingCharacterPositionLen(None));
+            5
+        };
+
+        let implementation_defined_portion_len = if let Ok(idp) = rec.read_dec_num(1) {
+            if idp != 0 {
+                warnings.push(Warning::WrongImplementationDefinedPortionLen(Some(idp as u8)));
+            }
+            idp as u8
+        } else {
+            warnings.push(Warning::WrongImplementationDefinedPortionLen(None));
+            0
+        };
 
         let mut record = Record {
             length: record_length,
