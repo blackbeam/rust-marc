@@ -273,7 +273,16 @@ trait MrcReadInternal: io::Read {
         let mut pos = len;
         for &i in &buf[..(len as usize)] {
             if b'0' > i || i > b'9' {
-                return Err(Error::new(Other, "Unexpected byte while reading decimal number"));
+                return Err(
+                    Error::new(
+                        Other,
+                        format!(
+                            "Unexpected byte while reading decimal number (buf={:?},offet={})",
+                            buf,
+                            i
+                        )
+                    )
+                );
             }
             let mut x = (i - 0x30) as u32;
             if pos > 0 {
