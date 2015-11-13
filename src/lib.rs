@@ -349,12 +349,12 @@ impl<T: io::Read + ?Sized> MrcRead for T {}
 
 /// Iterator over all records in provided `io::Read` implementer.
 #[derive(Debug)]
-pub struct Records<T>(T, bool);
+pub struct Records<T>(T, bool, u8);
 
 impl<T: io::Read> Records<T> {
     /// Allows you to create an instance of `Records`.
     pub fn new(src: T) -> Records<T> {
-        Records(src, false)
+        Records(src, false, 0)
     }
 }
 
@@ -362,7 +362,7 @@ impl<T: io::Read> Iterator for Records<T> {
     type Item = io::Result<Record>;
 
     fn next(&mut self) -> Option<io::Result<Record>> {
-        let &mut Records(ref mut src, ref mut done) = self;
+        let &mut Records(ref mut src, ref mut done, ref mut err_count) = self;
         if *done {
             None
         } else {
@@ -373,7 +373,11 @@ impl<T: io::Read> Iterator for Records<T> {
                     None
                 },
                 Err(e) => {
-                    *done = true;
+                    if *err_count < 3 {
+                        *err_count += 1;
+                    } else {
+                        *done = true;
+                    }
                     Some(Err(e))
                 },
             }
