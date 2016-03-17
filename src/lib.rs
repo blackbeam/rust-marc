@@ -220,58 +220,17 @@ trait LeaderField {
     fn to_byte(&self) -> u8;
 }
 
-macro_rules! read_exact(
-    ($source:expr, $dest:expr, 1, $edesc:expr) => ({
-        match $source.read(&mut $dest) {
-            Ok(c) => {
-                if c == 1 {
-                    Ok(())
-                } else {
-                    Err(Error::new(Other, $edesc))
-                }
-            },
-            Err(e) => Err(e),
-        }
-    });
-    ($source:expr, $dest:expr, $count:expr, $edesc:expr) => ({
-        let mut rc = $count;
-        let mut err = None;
-        loop {
-            match $source.read(&mut $dest[($count - rc)..rc]) {
-                Ok(c) => {
-                    if c == rc {
-                        break;
-                    } else if c == 0 {
-                        err = Some(Error::new(Other, $edesc));
-                        break
-                    }
-                    rc -= c;
-                },
-                Err(e) => {
-                    err = Some(e);
-                    break;
-                }
-            }
-        }
-        if err.is_some() {
-            Err(err.unwrap())
-        } else {
-            Ok(())
-        }
-    });
-);
-
 trait MrcWriteInternal: io::Write {
     fn write_dec_num(&mut self, len: u8, mut value: u32) -> io::Result<()> {
         let mut buf = [0x30u8; 10];
         for i in 0u8..len {
-            buf[len as usize - i as usize - 1] = (value % 10) as u8 + 0x30;
+            buf[len as usize - i as usize - 1] = 0b110000 & (value % 10) as u8;
             value = value / 10;
             if value == 0 {
                 break;
             }
         }
-        self.write_all(&(&buf)[0..len as usize])
+        self.write_all(&buf[0..len as usize])
     }
 }
 
@@ -281,45 +240,37 @@ trait MrcReadInternal: io::Read {
     #[inline]
     fn read_leader_field<T: LeaderField>(&mut self) -> io::Result<T> {
         let mut buf = [0u8];
-        try!(read_exact!(self, buf, 1, "Unexpected EOF while reading leader field"));
+        try!(self.read_exact(&mut buf[..]));
         Ok(T::from_byte(buf[0]))
     }
     fn read_dec_num(&mut self, len: u8) -> io::Result<u32> {
-        assert!(0 < len && len < 11);
-        let mut buf = [0u8; 11];
-        try!(read_exact!(self, buf, len as usize, "Unexpected EOF while reading decimal number"));
-        let mut res = 0u32;
-        let mut pos = len;
-        for &i in &buf[..(len as usize)] {
-            if b'0' > i || i > b'9' {
-                return Err(
-                    Error::new(
-                        Other,
-                        format!(
-                            "Unexpected byte while reading decimal number (buf={:?},offet={})",
-                            buf,
-                            i
-                        )
-                    )
-                );
+        let mut buf = [0u8; 8];
+        let buf = &mut buf[..(len as usize)];
+        try!(self.read_exact(buf));
+        for byte in buf.iter() {
+            if b'0' > *byte || *byte > b'9' {
+                return Err(Error::new(
+                    Other,
+                    format!("Unexpected byte while reading decimal number (bytes={:?})",
+                            buf)
+                ));
             }
-            let mut x = (i - 0x30) as u32;
-            if pos > 0 {
-                if x != 0 {
-                    for _ in 1..pos {
-                        x *= 10
-                    }
-                }
-                pos -= 1;
-            }
-            res += x;
         }
-        Ok(res)
+        unsafe {
+            let bufx = buf.as_mut_ptr() as *mut u64;
+            *bufx = *bufx & 0x0F0F0F0F0F0F0F0F;
+        }
+        let mut result = 0;
+        for &x in buf.iter() {
+            result *= 10;
+            result += x as u32;
+        }
+        Ok(result)
     }
     // -> (tag, field_len, start_pos)
     fn read_directory_entry(&mut self) -> io::Result<DirectoryEntry> {
         let mut tag = [0u8; 3];
-        try!(read_exact!(self, tag, 3, "Unexpected EOF while reading directory entry"));
+        try!(self.read_exact(&mut tag[..]));
         let field_len = try!(self.read_dec_num(4));
         let start_pos = try!(self.read_dec_num(5));
         Ok((Tag(tag), field_len, start_pos))
@@ -331,35 +282,33 @@ impl<T: io::Read + ?Sized> MrcReadInternal for T {}
 /// io::Read extension which provides `read_record` method.
 pub trait MrcRead: io::Read {
     fn read_record(&mut self) -> io::Result<Option<Record>> {
-        let mut rec = io::Cursor::new(Vec::with_capacity(5));
-
-        match self.take(5).read_to_end(rec.get_mut()) {
-            Ok(0) => return Ok(None),
-            Ok(x) if x < 5 => {
-                return Err(Error::new(Other, "Unexpected EOF while reading record length"))
+        let mut rec_len = [0; 5];
+        match self.read_exact(&mut rec_len[..]) {
+            Err(_) => {
+                return Ok(None)
             },
-            Err(e) => return Err(e),
             _ => (),
         }
 
-        let record_length = try!(rec.read_dec_num(5));
+        let record_length = try!((&rec_len[..]).read_dec_num(5));
         if MIN_REC_LEN > record_length || record_length > MAX_REC_LEN {
             return Err(Error::new(Other, "Record length is out of bounds"));
         }
 
-        rec.get_mut().reserve(record_length as usize - 5);
-        match self.take(record_length as u64 - 5).read_to_end(rec.get_mut()) {
-            Ok(x) if x < record_length as usize - 5 => {
+        let mut rec = Vec::with_capacity(record_length as usize);
+        unsafe { rec.set_len(record_length as usize) }
+        (&mut rec[..5]).clone_from_slice(&rec_len[..]);
+        match self.read_exact(&mut rec[5..]) {
+            Err(_) => {
                 return Err(Error::new(Other, "Unexpected EOF while reading record"));
-            },
-            Err(e) => return Err(e),
+            }
             _ => (),
         }
-        if rec.get_ref()[rec.get_ref().len()-1] != RECORD_TERMINATOR {
+        if rec[rec.len()-1] != RECORD_TERMINATOR {
             return Err(Error::new(Other, "No record terminator"));
         }
 
-        let record = try!(Record::from_data(rec.into_inner()));
+        let record = try!(Record::from_data(rec));
         Ok(Some(record))
     }
 }
@@ -576,8 +525,8 @@ impl<'a> Iterator for Subfields<'a> {
                     continue;
                 }
                 if x == SUBFIELD_DELIMITER {
-                    self.start = Some(self.offset+i);
-                    self.ident = Some(self.field.data[self.offset+i+1].into());
+                    self.start = Some(self.offset + i);
+                    self.ident = Some(self.field.data[self.offset + i + 1].into());
                     self.offset += i + 1;
                     break;
                 } else if x == FIELD_TERMINATOR {
@@ -593,7 +542,7 @@ impl<'a> Iterator for Subfields<'a> {
                     self.offset += i - 1;
                     self.remain -= 1;
                     subfield = Some(Subfield {
-                        data: &self.field.data[start..start+i+1],
+                        data: &self.field.data[start..start + i + 1],
                         tag: self.field.tag.clone(),
                         ident: self.ident.take().unwrap(),
                     });
@@ -690,10 +639,8 @@ impl DataFieldBuilder {
         let tag = self.tag;
         let mut data = Vec::with_capacity(self.size as usize);
         {
-            // XXX: Wait for Vec::push_all
             let Indicator(ref ind) = self.indicator;
-            data.push(ind[0]);
-            data.push(ind[1])
+            data.extend_from_slice(ind);
         }
         for (ident, subfiled_data) in self.subfields.into_iter() {
             data.push(ident.into());
@@ -879,88 +826,108 @@ impl Record {
         Record::from_data(data)
     }
     fn from_data(data: Vec<u8>) -> io::Result<Record> {
-        let mut rec = io::Cursor::new(data);
-        let record_length = try!(rec.read_dec_num(5));
-        let mut warnings = Vec::new();
-        let record_status = try!(rec.read_leader_field());
-        let type_of_record = try!(rec.read_leader_field());
-        let bibliographic_level = try!(rec.read_leader_field());
-        let type_of_control = try!(rec.read_leader_field());
-        let character_coding_scheme = try!(rec.read_leader_field());
+        let meta = {
+            let mut rec = &*data;
+            let record_length = try!(rec.read_dec_num(5));
+            let mut warnings = Vec::new();
+            let record_status = try!(rec.read_leader_field());
+            let type_of_record = try!(rec.read_leader_field());
+            let bibliographic_level = try!(rec.read_leader_field());
+            let type_of_control = try!(rec.read_leader_field());
+            let character_coding_scheme = try!(rec.read_leader_field());
 
-        let indicator_count = if let Ok(ic) = rec.read_dec_num(1) {
-            if ic != 2 {
-                warnings.push(Warning::WrongIndicatorCount(Some(ic as u8)));
-            }
-            ic as u8
-        } else {
-            warnings.push(Warning::WrongIndicatorCount(None));
-            2
-        };
+            let indicator_count = if let Ok(ic) = rec.read_dec_num(1) {
+                if ic != 2 {
+                    warnings.push(Warning::WrongIndicatorCount(Some(ic as u8)));
+                }
+                ic as u8
+            } else {
+                warnings.push(Warning::WrongIndicatorCount(None));
+                2
+            };
 
-        let subfield_code_count = if let Ok(scc) = rec.read_dec_num(1) {
-            if scc != 2 {
-                warnings.push(Warning::WrongSubfieldCodeCount(Some(scc as u8)));
-            }
-            scc as u8
-        } else {
-            warnings.push(Warning::WrongSubfieldCodeCount(None));
-            2
-        };
+            let subfield_code_count = if let Ok(scc) = rec.read_dec_num(1) {
+                if scc != 2 {
+                    warnings.push(Warning::WrongSubfieldCodeCount(Some(scc as u8)));
+                }
+                scc as u8
+            } else {
+                warnings.push(Warning::WrongSubfieldCodeCount(None));
+                2
+            };
 
-        let base_address_of_data = try!(rec.read_dec_num(5));
-        let encoding_level = try!(rec.read_leader_field());
-        let descriptive_cataloging_form = try!(rec.read_leader_field());
-        let multipart_resource_record_level = try!(rec.read_leader_field());
+            let base_address_of_data = try!(rec.read_dec_num(5));
+            let encoding_level = try!(rec.read_leader_field());
+            let descriptive_cataloging_form = try!(rec.read_leader_field());
+            let multipart_resource_record_level = try!(rec.read_leader_field());
 
-        let length_of_field_len = if let Ok(lof) = rec.read_dec_num(1) {
-            if lof != 4 {
-                warnings.push(Warning::WrongLengthOfFieldLen(Some(lof as u8)));
-            }
-            lof as u8
-        } else {
-            warnings.push(Warning::WrongLengthOfFieldLen(None));
-            4
-        };
+            let length_of_field_len = if let Ok(lof) = rec.read_dec_num(1) {
+                if lof != 4 {
+                    warnings.push(Warning::WrongLengthOfFieldLen(Some(lof as u8)));
+                }
+                lof as u8
+            } else {
+                warnings.push(Warning::WrongLengthOfFieldLen(None));
+                4
+            };
 
-        let starting_character_position_len = if let Ok(scp) = rec.read_dec_num(1) {
-            if scp != 5 {
-                warnings.push(Warning::WrongStartingCharacterPositionLen(Some(scp as u8)));
-            }
-            scp as u8
-        } else {
-            warnings.push(Warning::WrongStartingCharacterPositionLen(None));
-            5
-        };
+            let starting_character_position_len = if let Ok(scp) = rec.read_dec_num(1) {
+                if scp != 5 {
+                    warnings.push(Warning::WrongStartingCharacterPositionLen(Some(scp as u8)));
+                }
+                scp as u8
+            } else {
+                warnings.push(Warning::WrongStartingCharacterPositionLen(None));
+                5
+            };
 
-        let implementation_defined_portion_len = if let Ok(idp) = rec.read_dec_num(1) {
-            if idp != 0 {
-                warnings.push(Warning::WrongImplementationDefinedPortionLen(Some(idp as u8)));
-            }
-            idp as u8
-        } else {
-            warnings.push(Warning::WrongImplementationDefinedPortionLen(None));
-            0
+            let implementation_defined_portion_len = if let Ok(idp) = rec.read_dec_num(1) {
+                if idp != 0 {
+                    warnings.push(Warning::WrongImplementationDefinedPortionLen(Some(idp as u8)));
+                }
+                idp as u8
+            } else {
+                warnings.push(Warning::WrongImplementationDefinedPortionLen(None));
+                0
+            };
+            (
+                record_length,
+                base_address_of_data,
+                indicator_count,
+                subfield_code_count,
+                length_of_field_len,
+                starting_character_position_len,
+                implementation_defined_portion_len,
+                record_status,
+                type_of_record,
+                bibliographic_level,
+                type_of_control,
+                character_coding_scheme,
+                encoding_level,
+                descriptive_cataloging_form,
+                multipart_resource_record_level,
+                warnings,
+            )
         };
 
         let mut record = Record {
-            length: record_length,
-            base_address_of_data: base_address_of_data,
-            indicator_count: indicator_count,
-            subfield_code_count: subfield_code_count,
-            length_of_field_len: length_of_field_len,
-            starting_character_position_len: starting_character_position_len,
-            implementation_defined_portion_len: implementation_defined_portion_len,
-            record_status: record_status,
-            type_of_record: type_of_record,
-            bibliographic_level: bibliographic_level,
-            type_of_control: type_of_control,
-            character_coding_scheme: character_coding_scheme,
-            encoding_level: encoding_level,
-            descriptive_cataloging_form: descriptive_cataloging_form,
-            multipart_resource_record_level: multipart_resource_record_level,
-            warnings: warnings,
-            data: rec.into_inner(),
+            length: meta.0,
+            base_address_of_data: meta.1,
+            indicator_count: meta.2,
+            subfield_code_count: meta.3,
+            length_of_field_len: meta.4,
+            starting_character_position_len: meta.5,
+            implementation_defined_portion_len: meta.6,
+            record_status: meta.7,
+            type_of_record: meta.8,
+            bibliographic_level: meta.9,
+            type_of_control: meta.10,
+            character_coding_scheme: meta.11,
+            encoding_level: meta.12,
+            descriptive_cataloging_form: meta.13,
+            multipart_resource_record_level: meta.14,
+            warnings: meta.15,
+            data: data,
             directory_entryes: None,
         };
         try!(record.parse_directory());
@@ -996,19 +963,10 @@ impl Record {
     }
 
     fn parse_directory(&mut self) -> io::Result<()> {
-        let mut directory_entryes_count = 0;
-        let mut j = 24;
-        while j < (self.data.len() - 24) {
-            if self.data[j] == FIELD_TERMINATOR {
-                break;
-            } else {
-                directory_entryes_count += 1;
-                j += 12;
-            }
-        }
-        let mut directory_entryes = Vec::with_capacity(directory_entryes_count);
-        let mut dir = io::Cursor::new(& self.data[24..]);
-        while dir.get_ref()[dir.position() as usize] != FIELD_TERMINATOR {
+        let directory_entryes_count = (self.base_address_of_data - 24) / 12;
+        let mut directory_entryes = Vec::with_capacity(directory_entryes_count as usize);
+        let mut dir = &self.data[24..(self.base_address_of_data as usize - 1)];
+        while dir.len() > 0 {
             directory_entryes.push(try!(dir.read_directory_entry()));
         }
         self.directory_entryes = Some(directory_entryes);
