@@ -1096,6 +1096,7 @@ leader_field! {
 mod tests {
     const RECS: &'static str = "00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\x1e000000001\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d\
                                 00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
+    const REC_SIZE: u64 = 963;
     const FIELDS_COUNT: usize = 17;
     mod read {
         use super::RECS;
@@ -1312,6 +1313,7 @@ mod tests {
     mod bench {
         use test;
         use super::RECS;
+        use super::REC_SIZE;
         use super::super::*;
 
         #[bench]
@@ -1321,11 +1323,11 @@ mod tests {
                     if let Some(rec) = rec {
                         test::black_box(rec);
                     } else {
-                        assert!(false);
+                        panic!();
                     }
                 }
             });
-            b.bytes += RECS.as_bytes().len() as u64;
+            b.bytes += REC_SIZE;
         }
 
         #[bench]
@@ -1333,13 +1335,13 @@ mod tests {
             b.iter(|| {
                 if let Ok(rec) = RECS.as_bytes().read_record() {
                     if let Some(rec) = rec {
-                        assert_eq!(rec.get_field("979").len(), 2);
+                        test::black_box(rec.get_field("979"));
                     } else {
-                        assert!(false);
+                        panic!();
                     }
                 }
             });
-            b.bytes += RECS.as_bytes().len() as u64;
+            b.bytes += REC_SIZE;
         }
 
         #[bench]
@@ -1351,11 +1353,11 @@ mod tests {
                             test::black_box(field);
                         }
                     } else {
-                        assert!(false);
+                        panic!();
                     }
                 }
             });
-            b.bytes += RECS.as_bytes().len() as u64;
+            b.bytes += REC_SIZE;
         }
 
         #[bench]
@@ -1369,11 +1371,11 @@ mod tests {
                             }
                         }
                     } else {
-                        assert!(false);
+                        panic!();
                     }
                 }
             });
-            b.bytes += RECS.as_bytes().len() as u64;
+            b.bytes += REC_SIZE;
         }
 
         #[bench]
