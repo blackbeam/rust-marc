@@ -50,6 +50,7 @@ pub struct FieldData<'a>(&'a [u8]);
 type DirectoryEntry = (Tag, u32, u32);
 
 impl Borrow<[u8]> for Tag {
+    #[inline]
     fn borrow(&self) -> &[u8] {
         let &Tag(ref tag) = self;
         tag
@@ -57,6 +58,7 @@ impl Borrow<[u8]> for Tag {
 }
 
 impl<'a> Borrow<[u8]> for FieldData<'a> {
+    #[inline]
     fn borrow(&self) -> &[u8] {
         let &FieldData(ref data) = self;
         data
@@ -64,6 +66,7 @@ impl<'a> Borrow<[u8]> for FieldData<'a> {
 }
 
 impl<'a> From<&'a [u8]> for Tag {
+    #[inline]
     fn from(s: &'a [u8]) -> Tag {
         assert!(s.len() == 3, "Tag length != 3");
         Tag([s[0], s[1], s[2]])
@@ -71,30 +74,35 @@ impl<'a> From<&'a [u8]> for Tag {
 }
 
 impl<'a> From<&'a str> for Tag {
+    #[inline]
     fn from(s: &'a str) -> Tag {
         s.as_bytes().into()
     }
 }
 
 impl From<[u8; 3]> for Tag {
+    #[inline]
     fn from(s: [u8; 3]) -> Tag {
         Tag(s)
     }
 }
 
 impl<'a> From<&'a Tag> for &'a str {
+    #[inline]
     fn from(tag: &'a Tag) -> &'a str {
         str::from_utf8(tag.borrow()).unwrap()
     }
 }
 
 impl<'a> From<&'a Tag> for &'a [u8] {
+    #[inline]
     fn from(tag: &'a Tag) -> &'a [u8] {
         tag.borrow()
     }
 }
 
 impl<'a> From<&'a Tag> for [u8; 3] {
+    #[inline]
     fn from(tag: &'a Tag) -> [u8; 3] {
         let Tag(x) = tag.clone();
         x
@@ -121,24 +129,28 @@ impl FromFieldData for str {
 }
 
 impl From<Identifier> for u8 {
+    #[inline]
     fn from(Identifier(x): Identifier) -> u8 {
         x
     }
 }
 
 impl From<Identifier> for char {
+    #[inline]
     fn from(Identifier(x): Identifier) -> char {
         char::from_u32(x as u32).unwrap()
     }
 }
 
 impl From<u8> for Identifier {
+    #[inline]
     fn from(x: u8) -> Identifier {
         Identifier(x)
     }
 }
 
 impl From<char> for Identifier {
+    #[inline]
     fn from(x: char) -> Identifier {
         assert_eq!(x.len_utf8(), 1);
         let mut dst = String::with_capacity(1);
@@ -148,6 +160,7 @@ impl From<char> for Identifier {
 }
 
 impl Borrow<[u8]> for Indicator {
+    #[inline]
     fn borrow(&self) -> &[u8] {
         let &Indicator(ref ind) = self;
         ind
@@ -155,18 +168,21 @@ impl Borrow<[u8]> for Indicator {
 }
 
 impl From<Indicator> for [u8; 2] {
+    #[inline]
     fn from(Indicator(ind): Indicator) -> [u8; 2] {
         ind
     }
 }
 
 impl From<Indicator> for [char; 2] {
+    #[inline]
     fn from(Indicator(ind): Indicator) -> [char; 2] {
         [char::from_u32(ind[0] as u32).unwrap(), char::from_u32(ind[1] as u32).unwrap()]
     }
 }
 
 impl From<[char; 2]> for Indicator {
+    #[inline]
     fn from(bs: [char; 2]) -> Indicator {
         assert_eq!(bs[0].len_utf8(), 1);
         assert_eq!(bs[1].len_utf8(), 1);
@@ -179,18 +195,21 @@ impl From<[char; 2]> for Indicator {
 }
 
 impl From<[u8; 2]> for Indicator {
+    #[inline]
     fn from(bs: [u8; 2]) -> Indicator {
         Indicator(bs)
     }
 }
 
 impl<'a> From<Field<'a>> for FieldRepr {
+    #[inline]
     fn from(Field {tag, data}: Field<'a>) -> FieldRepr {
         (tag, data.to_owned())
     }
 }
 
 impl<'a> From<Subfield<'a>> for SubfieldRepr {
+    #[inline]
     fn from(sf: Subfield<'a>) -> SubfieldRepr {
         (sf.ident, sf.data.to_owned())
     }
