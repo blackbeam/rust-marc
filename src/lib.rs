@@ -1,977 +1,330 @@
 #![cfg_attr(feature = "nightly", feature(test))]
+#![recursion_limit = "1024"]
+
+#[macro_use]
+extern crate error_chain;
 #[cfg(feature = "nightly")]
 extern crate test;
 
-use std::borrow::Borrow;
-use std::borrow::ToOwned;
-use std::char;
+use std::borrow::{Borrow, Cow};
+use std::fmt;
 use std::io;
-use std::io::Read;
-use std::io::Error;
-use std::io::ErrorKind::Other;
 use std::slice;
-use std::str;
 
-const MIN_REC_LEN: u32 = 24;
-const MAX_REC_LEN: u32 = 99_999;
+mod directory;
+pub mod errors;
+mod field;
+mod misc;
+mod tag;
+mod indicator;
+mod identifier;
+
+#[doc(inline)]
+pub use field::Field;
+#[doc(inline)]
+pub use field::FieldRepr;
+#[doc(inline)]
+pub use field::FromFieldData;
+#[doc(inline)]
+pub use field::fields::Fields;
+#[doc(inline)]
+pub use field::subfield::Subfield;
+#[doc(inline)]
+pub use field::subfield::subfields::Subfields;
+#[doc(inline)]
+pub use tag::Tag;
+#[doc(inline)]
+pub use indicator::Indicator;
+#[doc(inline)]
+pub use identifier::Identifier;
+
+use directory::Directory;
+use errors::*;
+
+const MAX_FIELD_LEN: usize = 9_999;
+const MAX_RECORD_LEN: usize = 99_999;
 const RECORD_TERMINATOR: u8 = 0x1D;
 const FIELD_TERMINATOR: u8 = 0x1E;
 const SUBFIELD_DELIMITER: u8 = 0x1F;
 
-/// Field representation.
-pub type FieldRepr = (Tag, Vec<u8>);
+macro_rules! get {
+    ($name:ident, $sname:ident, $num:expr) => (
+        pub fn $sname(&self) -> $name {
+            self.data[$num].into()
+        }
+    );
+}
 
-/// Subfield representation.
-pub type SubfieldRepr = (Identifier, Vec<u8>);
-
-/// Field tag representation.
+/// Parsed MARC Record.
 ///
-/// `Into<Tag>` are implemented for `&[u8]`, `&str`, `[u8; 3]` and `Tag`.
-///
-/// `From<&Tag>` are implemented for `&[u8]`, `&str`, `[u8; 3]` and `&Tag`.
-#[derive(Eq, PartialEq, Ord, PartialOrd,
-         Clone, Hash, Debug)]
-pub struct Tag([u8; 3]);
-
-/// Data field indicator representation.
-#[derive(Eq, PartialEq, Ord, PartialOrd,
-         Clone, Hash, Debug)]
-pub struct Indicator([u8; 2]);
-
-/// Subfield identifier representation.
-#[derive(Eq, PartialEq, Ord, PartialOrd,
-         Clone, Copy, Hash, Debug)]
-pub struct Identifier(u8);
-
-/// Reference to a data of a field.
-pub struct FieldData<'a>(&'a [u8]);
-
-// -> (tag, field_len, start_pos)
-type DirectoryEntry = (Tag, u32, u32);
-
-impl Borrow<[u8]> for Tag {
-    #[inline]
-    fn borrow(&self) -> &[u8] {
-        let &Tag(ref tag) = self;
-        tag
-    }
+/// It could be borrowed if it was parsed from a buffer or it could be owned if it was read from an
+/// `io::Read` implementor.
+pub struct Record<'a> {
+    data: Cow<'a, [u8]>,
+    data_offset: usize,
+    directory: Directory,
 }
 
-impl<'a> Borrow<[u8]> for FieldData<'a> {
-    #[inline]
-    fn borrow(&self) -> &[u8] {
-        let &FieldData(ref data) = self;
-        data
-    }
-}
-
-impl<'a> From<&'a [u8]> for Tag {
-    #[inline]
-    fn from(s: &'a [u8]) -> Tag {
-        assert!(s.len() == 3, "Tag length != 3");
-        Tag([s[0], s[1], s[2]])
-    }
-}
-
-impl<'a> From<&'a str> for Tag {
-    #[inline]
-    fn from(s: &'a str) -> Tag {
-        s.as_bytes().into()
-    }
-}
-
-impl From<[u8; 3]> for Tag {
-    #[inline]
-    fn from(s: [u8; 3]) -> Tag {
-        Tag(s)
-    }
-}
-
-impl<'a> From<&'a Tag> for &'a str {
-    #[inline]
-    fn from(tag: &'a Tag) -> &'a str {
-        str::from_utf8(tag.borrow()).unwrap()
-    }
-}
-
-impl<'a> From<&'a Tag> for &'a [u8] {
-    #[inline]
-    fn from(tag: &'a Tag) -> &'a [u8] {
-        tag.borrow()
-    }
-}
-
-impl<'a> From<&'a Tag> for [u8; 3] {
-    #[inline]
-    fn from(tag: &'a Tag) -> [u8; 3] {
-        let Tag(x) = tag.clone();
-        x
-    }
-}
-
-/// Entities that can be created from data of a field or a subfield.
-pub trait FromFieldData {
-    fn from_data(data: &[u8]) -> Option<&Self>;
-}
-
-impl FromFieldData for [u8] {
-    #[inline]
-    fn from_data(data: &[u8]) -> Option<&[u8]> {
-        Some(data)
-    }
-}
-
-impl FromFieldData for str {
-    #[inline]
-    fn from_data(data: &[u8]) -> Option<&str> {
-        str::from_utf8(data).ok()
-    }
-}
-
-impl From<Identifier> for u8 {
-    #[inline]
-    fn from(Identifier(x): Identifier) -> u8 {
-        x
-    }
-}
-
-impl From<Identifier> for char {
-    #[inline]
-    fn from(Identifier(x): Identifier) -> char {
-        char::from_u32(x as u32).unwrap()
-    }
-}
-
-impl From<u8> for Identifier {
-    #[inline]
-    fn from(x: u8) -> Identifier {
-        Identifier(x)
-    }
-}
-
-impl From<char> for Identifier {
-    #[inline]
-    fn from(x: char) -> Identifier {
-        assert_eq!(x.len_utf8(), 1);
-        let mut dst = String::with_capacity(1);
-        dst.push(x);
-        Identifier(AsRef::<str>::as_ref(&dst).as_bytes()[0])
-    }
-}
-
-impl Borrow<[u8]> for Indicator {
-    #[inline]
-    fn borrow(&self) -> &[u8] {
-        let &Indicator(ref ind) = self;
-        ind
-    }
-}
-
-impl From<Indicator> for [u8; 2] {
-    #[inline]
-    fn from(Indicator(ind): Indicator) -> [u8; 2] {
-        ind
-    }
-}
-
-impl From<Indicator> for [char; 2] {
-    #[inline]
-    fn from(Indicator(ind): Indicator) -> [char; 2] {
-        [char::from_u32(ind[0] as u32).unwrap(), char::from_u32(ind[1] as u32).unwrap()]
-    }
-}
-
-impl From<[char; 2]> for Indicator {
-    #[inline]
-    fn from(bs: [char; 2]) -> Indicator {
-        assert_eq!(bs[0].len_utf8(), 1);
-        assert_eq!(bs[1].len_utf8(), 1);
-        let mut dst = String::with_capacity(2);
-        dst.push(bs[0]);
-        dst.push(bs[1]);
-        let bytes = AsRef::<str>::as_ref(&dst).as_bytes();
-        Indicator([bytes[0], bytes[1]])
-    }
-}
-
-impl From<[u8; 2]> for Indicator {
-    #[inline]
-    fn from(bs: [u8; 2]) -> Indicator {
-        Indicator(bs)
-    }
-}
-
-impl<'a> From<Field<'a>> for FieldRepr {
-    #[inline]
-    fn from(Field {tag, data}: Field<'a>) -> FieldRepr {
-        (tag, data.to_owned())
-    }
-}
-
-impl<'a> From<Subfield<'a>> for SubfieldRepr {
-    #[inline]
-    fn from(sf: Subfield<'a>) -> SubfieldRepr {
-        (sf.ident, sf.data.to_owned())
-    }
-}
-
-trait LeaderField {
-    fn from_byte(byte: u8) -> Self;
-    fn to_byte(&self) -> u8;
-}
-
-trait MrcWriteInternal: io::Write {
-    fn write_dec_num(&mut self, len: u8, mut value: u32) -> io::Result<()> {
-        let mut buf = [0x30u8; 10];
-        for i in 0u8..len {
-            buf[len as usize - i as usize - 1] = 0b110000 & (value % 10) as u8;
-            value = value / 10;
-            if value == 0 {
-                break;
-            }
+impl<'a> Record<'a> {
+    /// Will try to parse record from a buffer.
+    ///
+    /// Will borrow an `input` for the lifetime of a produced record.
+    pub fn parse<'x>(input: &'x [u8]) -> Result<Record<'x>> {
+        let len = try!(misc::read_dec_5(input));
+        if input.len() < len {
+            return Err(ErrorKind::UnexpectedEof.into());
         }
-        self.write_all(&buf[0..len as usize])
-    }
-}
 
-impl<T: io::Write + ?Sized> MrcWriteInternal for T {}
-
-trait MrcReadInternal: io::Read {
-    #[inline]
-    fn read_leader_field<T: LeaderField>(&mut self) -> io::Result<T> {
-        let mut buf = [0u8];
-        try!(self.read_exact(&mut buf[..]));
-        Ok(T::from_byte(buf[0]))
-    }
-    fn read_dec_num(&mut self, len: u8) -> io::Result<u32> {
-        let mut buf = [0u8; 8];
-        let buf = &mut buf[..(len as usize)];
-        try!(self.read_exact(buf));
-        for byte in buf.iter() {
-            if b'0' > *byte || *byte > b'9' {
-                return Err(Error::new(
-                    Other,
-                    format!("Unexpected byte while reading decimal number (bytes={:?})",
-                            buf)
-                ));
-            }
+        let data = &input[..len];
+        if data[len - 1] != RECORD_TERMINATOR {
+            return Err(ErrorKind::NoRecordTerminator.into());
         }
-        unsafe {
-            let bufx = buf.as_mut_ptr() as *mut u64;
-            *bufx = *bufx & 0x0F0F0F0F0F0F0F0F;
-        }
-        let mut result = 0;
-        for &x in buf.iter() {
-            result *= 10;
-            result += x as u32;
-        }
-        Ok(result)
-    }
-    // -> (tag, field_len, start_pos)
-    fn read_directory_entry(&mut self) -> io::Result<DirectoryEntry> {
-        let mut tag = [0u8; 3];
-        try!(self.read_exact(&mut tag[..]));
-        let field_len = try!(self.read_dec_num(4));
-        let start_pos = try!(self.read_dec_num(5));
-        Ok((Tag(tag), field_len, start_pos))
-    }
-}
 
-impl<T: io::Read + ?Sized> MrcReadInternal for T {}
+        let data_offset = try!(misc::read_dec_5(&data[12..17]));
+        let directory = try!(Directory::parse(&data[24..data_offset]));
 
-/// io::Read extension which provides `read_record` method.
-pub trait MrcRead: io::Read {
-    fn read_record(&mut self) -> io::Result<Option<Record>> {
-        let mut rec_len = [0; 5];
-        match self.read_exact(&mut rec_len[..]) {
-            Err(_) => {
-                return Ok(None)
+        Ok(Record {
+            data: Cow::Borrowed(data),
+            data_offset: data_offset,
+            directory: directory,
+        })
+    }
+
+    /// Will try to read a `Record` from an `io::Read` implementor.
+    ///
+    /// Will produce owned version of `Record`.
+    pub fn read<T: io::Read>(mut input: &mut T) -> Result<Option<Record<'static>>> {
+        let mut data = vec![0; 5];
+        match input.read_exact(&mut *data) {
+            Ok(_) => (),
+            Err(ref err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                return Ok(None);
             },
-            _ => (),
-        }
-
-        let record_length = try!((&rec_len[..]).read_dec_num(5));
-        if MIN_REC_LEN > record_length || record_length > MAX_REC_LEN {
-            return Err(Error::new(Other, "Record length is out of bounds"));
-        }
-
-        let mut rec = Vec::with_capacity(record_length as usize);
-        unsafe { rec.set_len(record_length as usize) }
-        (&mut rec[..5]).clone_from_slice(&rec_len[..]);
-        match self.read_exact(&mut rec[5..]) {
-            Err(_) => {
-                return Err(Error::new(Other, "Unexpected EOF while reading record"));
-            }
-            _ => (),
-        }
-        if rec[rec.len()-1] != RECORD_TERMINATOR {
-            return Err(Error::new(Other, "No record terminator"));
-        }
-
-        let record = try!(Record::from_data(rec));
-        Ok(Some(record))
-    }
-}
-
-impl<T: io::Read + ?Sized> MrcRead for T {}
-
-/// Iterator over all records in provided `io::Read` implementer.
-#[derive(Debug)]
-pub struct Records<T>(T, bool, u8);
-
-impl<T: io::Read> Records<T> {
-    /// Allows you to create an instance of `Records`.
-    pub fn new(src: T) -> Records<T> {
-        Records(src, false, 0)
-    }
-}
-
-impl<T: io::Read> Iterator for Records<T> {
-    type Item = io::Result<Record>;
-
-    fn next(&mut self) -> Option<io::Result<Record>> {
-        let &mut Records(ref mut src, ref mut done, ref mut err_count) = self;
-        if *done {
-            None
-        } else {
-            match src.read_record() {
-                Ok(Some(record)) => Some(Ok(record)),
-                Ok(None) => {
-                    *done = true;
-                    None
-                },
-                Err(e) => {
-                    if *err_count < 3 {
-                        *err_count += 1;
-                    } else {
-                        *done = true;
-                    }
-                    Some(Err(e))
-                },
+            Err(err) => {
+                return Err(err).chain_err(|| ErrorKind::UnexpectedEof);
             }
         }
-    }
-}
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Warning {
-    WrongIndicatorCount(Option<u8>),
-    WrongSubfieldCodeCount(Option<u8>),
-    WrongLengthOfFieldLen(Option<u8>),
-    WrongStartingCharacterPositionLen(Option<u8>),
-    WrongImplementationDefinedPortionLen(Option<u8>),
-}
+        let len = try!(misc::read_dec_5(&*data));
+        data.reserve(len - 5);
+        unsafe { data.set_len(len) };
+        try!(input.read_exact(&mut data[5..len]).chain_err(|| ErrorKind::UnexpectedEof));
 
-/// Iterator over fields of a record.
-#[derive(Clone)]
-pub struct Fields<'a> {
-    record: &'a Record,
-    vec_iter: slice::Iter<'a, DirectoryEntry>,
-    remain: u32,
-}
+        let data_offset = try!(misc::read_dec_5(&data[12..17]));
+        let directory = try!(Directory::parse(&data[24..data_offset]));
 
-impl<'a> Iterator for Fields<'a> {
-    type Item = Field<'a>;
-
-    fn next(&mut self) -> Option<Field<'a>> {
-        if let Some(entry) = self.vec_iter.next() {
-            self.remain -= 1;
-            Some(Field::from_entry(self.record, entry))
-        } else {
-            None
-        }
+        Ok(Some(Record {
+            data: Cow::Owned(data),
+            data_offset: data_offset,
+            directory: directory,
+        }))
     }
 
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remain as usize, Some(self.remain as usize))
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-/// Borrowed version of a field of a record.
-pub struct Field<'a> {
-    data: &'a [u8],
-    tag: Tag,
-}
-
-impl<'a> Field<'a> {
-    fn from_entry<'r>(rec: &'r Record, entry: &DirectoryEntry) -> Field<'r> {
-        let begin = (rec.base_address_of_data + entry.2) as usize;
-        let end = begin + entry.1 as usize;
-        Field {
-            data: &rec.data[begin..end],
-            tag: entry.0.clone(),
-        }
-    }
-
-    /// Returns true if `self` is data field.
-    #[inline]
-    pub fn is_data_field(&self) -> bool {
-        self.data[2] == SUBFIELD_DELIMITER
-    }
-
-    /// Returns true if `self` is control field.
-    #[inline]
-    pub fn is_control_field(&self) -> bool {
-        ! self.is_data_field()
-    }
-
-    /// Returns subfields with identifier `ident` or empty vec if no such subfields.
-    pub fn get_subfield<'f, T: Into<Identifier>>(&'f self, ident: T) -> Vec<Subfield<'f>> {
-        let mut res = Vec::new();
-        if self.is_data_field() && self.data.len() > 2 {
-            let ident: Identifier = ident.into();
-            let mut start = None;
-            for (i, &x) in self.data.iter().enumerate() {
-                if i < 2 {
-                    continue;
-                }
-                if start.is_none() {
-                    if self.data[i-1] == SUBFIELD_DELIMITER {
-                        if x == ident.into() {
-                            start = Some(i - 1);
-                        }
-                    }
-                } else {
-                    if x == SUBFIELD_DELIMITER || x == FIELD_TERMINATOR {
-                        res.push(Subfield {
-                            data: &self.data[start.unwrap()..i],
-                            tag: self.tag.clone(),
-                            ident: ident,
-                        });
-                        start = None
-                    }
-                }
+    /// Will return fields with tag == `Tag`
+    pub fn field<T: Into<tag::Tag>>(&self, tag: T) -> Vec<Field> {
+        let tag = tag.into();
+        let mut output = Vec::with_capacity(4);
+        for entry in self.directory.entryes.iter() {
+            if entry.0 == tag {
+                let offset = self.data_offset + entry.2;
+                output.push(Field::new(tag, &self.data[offset..offset + entry.1 - 1]));
             }
         }
-        res
+        output
     }
 
-    /// Returns iterator over subfields of a data field.
-    #[inline]
-    pub fn subfields<'f>(&'f self) -> Subfields<'f> {
-        Subfields::new(self.clone())
+    /// Will return iterator over fields of a record
+    pub fn fields<'r>(&'r self) -> Fields<'r> {
+        Fields::new(self)
     }
 
-    /// Returns indictor of data field or `None` if self is control field.
-    #[inline]
-    pub fn get_indicator<T: From<Indicator>>(&self) -> Option<T> {
-        if self.is_data_field() {
-            Some(From::from([self.data[0], self.data[1]].into()))
-        } else {
-            None
+    /// View into a data of a record.
+    pub fn as_ref(&self) -> &[u8] {
+        self.data.borrow()
+    }
+
+    get!(RecordStatus, record_status, 5);
+    get!(TypeOfRecord, type_of_record, 6);
+    get!(BibliographicLevel, bibliographic_level, 7);
+    get!(TypeOfControl, type_of_control, 8);
+    get!(CharacterCodingScheme, character_coding_scheme, 9);
+    get!(EncodingLevel, encoding_level, 17);
+    get!(DescriptiveCatalogingForm, descriptive_cataloging_form, 18);
+    get!(MultipartResourceRecordLevel, multipart_resource_record_level, 19);
+}
+
+impl<'a> fmt::Display for Record<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(writeln!(f, "Leader: {}", String::from_utf8_lossy(&self.as_ref()[0..24])));
+        for field in self.fields() {
+            try!(writeln!(f, "Field: {} Data({})", field.get_tag(), field.get_data::<str>()));
         }
-    }
-
-    /// Returns data of a control field or `None` if self is data field.
-    #[inline]
-    pub fn get_data<T: FromFieldData + ?Sized>(&self) -> Option<&T> {
-        if ! self.is_data_field() && self.data.len() > 1 {
-            FromFieldData::from_data(&self.data[0..(self.data.len()-1)])
-        } else {
-            None
-        }
-    }
-
-    /// Returns tag of a field.
-    #[inline]
-    pub fn get_tag<T: From<&'a Tag>>(&'a self) -> T {
-        From::from(&self.tag)
+        Ok(())
     }
 }
 
-/// Iterator over subfields of a data field.
-#[derive(Clone)]
-pub struct Subfields<'a> {
-    field: Field<'a>,
-    offset: usize,
-    start: Option<usize>,
-    ident: Option<Identifier>,
-    remain: u32,
-}
-
-impl<'a> Subfields<'a> {
-    fn new(field: Field<'a>) -> Subfields<'a> {
-        let mut subfields = Subfields {
-            field: field,
-            offset: 0,
-            start: None,
-            ident: None,
-            remain: 0,
-        };
-        subfields.count_subfields();
-        subfields
+macro_rules! getset {
+    ($name:ident, $geti:ident, $seti:ident, $num:expr) => (
+    pub fn $geti(&self) -> $name {
+        self.leader[$num].into()
     }
-
-    fn count_subfields(&mut self) {
-        for &x in self.field.data.iter() {
-            if x == SUBFIELD_DELIMITER {
-                self.remain += 1;
-            }
-        }
-    }
-}
-
-impl<'a> Iterator for Subfields<'a> {
-    type Item = Subfield<'a>;
-
-    fn next(&mut self) -> Option<Subfield<'a>> {
-        if self.field.is_control_field() || self.field.data[self.offset] == FIELD_TERMINATOR {
-            None
-        } else if self.start.is_none() {
-            for (i, &x) in (&self.field.data[self.offset..]).iter().enumerate() {
-                if (self.offset + i) < 2 {
-                    continue;
-                }
-                if x == SUBFIELD_DELIMITER {
-                    self.start = Some(self.offset + i);
-                    self.ident = Some(self.field.data[self.offset + i + 1].into());
-                    self.offset += i + 1;
-                    break;
-                } else if x == FIELD_TERMINATOR {
-                    return None;
-                }
-            }
-            self.next()
-        } else {
-            let mut subfield = None;
-            let start = self.start.take().unwrap();
-            for (i, &x) in (&self.field.data[self.offset..]).iter().enumerate() {
-                if x == SUBFIELD_DELIMITER || x == FIELD_TERMINATOR {
-                    self.offset += i - 1;
-                    self.remain -= 1;
-                    subfield = Some(Subfield {
-                        data: &self.field.data[start..start + i + 1],
-                        tag: self.field.tag.clone(),
-                        ident: self.ident.take().unwrap(),
-                    });
-                    break;
-                }
-            }
-            subfield
-        }
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remain as usize, Some(self.remain as usize))
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-/// Borrowed version of a subfield of a data field.
-pub struct Subfield<'a> {
-    data: &'a [u8],
-    tag: Tag,
-    ident: Identifier,
-}
-
-impl<'a> Subfield<'a> {
-    /// Returns identifier of a subfield.
-    #[inline]
-    pub fn get_identifier<T: From<Identifier>>(&self) -> T {
-        From::from(self.ident)
-    }
-
-    /// Returns data of a subfield.
-    #[inline]
-    pub fn get_data<T: FromFieldData + ?Sized>(&self) -> Option<&T> {
-        if self.data.len() > 2 {
-            FromFieldData::from_data(&self.data[2..self.data.len()])
-        } else {
-            None
-        }
-    }
-
-    /// Returns tag of a field `self` belongs to.
-    #[inline]
-    pub fn get_tag<T: From<&'a Tag>>(&'a self) -> T {
-        From::from(&self.tag)
-    }
-}
-
-/// Allows you to build MARC variable data fields.
-pub struct DataFieldBuilder {
-    tag: Tag,
-    indicator: Indicator,
-    subfields: Vec<SubfieldRepr>,
-    size: u32,
-}
-
-impl DataFieldBuilder {
-    pub fn new<T, I, S>(tag: T, indicator: I, subfield: S) -> DataFieldBuilder
-    where T: Into<Tag> + Clone, I: Into<Indicator>, S: Into<SubfieldRepr> {
-        let tag = tag.clone().into();
-        let indicator = indicator.into();
-        let subfield = subfield.into();
-        let mut res = DataFieldBuilder {
-            tag: tag,
-            indicator: indicator,
-            subfields: Vec::new(),
-            size: 2 + subfield.1.len() as u32 + 1,
-        };
-        res.subfields.insert(0, subfield);
-        res
-    }
-    pub fn add_subfield<T: Into<SubfieldRepr>>(mut self, subfield: T) -> DataFieldBuilder {
-        let subfield = subfield.into();
-        self.size += subfield.1.len() as u32;
-        let mut index = 0;
-        for (i, sf) in self.subfields.iter().enumerate() {
-            if sf.0 >= subfield.0 {
-                index = i;
-                break;
-            }
-        }
-        self.subfields.insert(index, subfield);
+    pub fn $seti(&mut self, x: $name) -> &mut Self {
+        self.leader[$num] = x.into();
         self
     }
-    /// Removes all subfields with identifier `ident`.
-    pub fn remove_subfield<T: Into<Identifier>>(mut self, ident: T) -> DataFieldBuilder {
-        let ident = ident.into();
-        self.subfields.retain(|subfield| {
-            subfield.0 != ident
-        });
-        self
-    }
-    pub fn into_field_repr(self) -> FieldRepr {
-        let tag = self.tag;
-        let mut data = Vec::with_capacity(self.size as usize);
-        {
-            let Indicator(ref ind) = self.indicator;
-            data.extend_from_slice(ind);
-        }
-        for (ident, subfiled_data) in self.subfields.into_iter() {
-            data.push(ident.into());
-            data.extend(subfiled_data);
-        }
-        data.push(FIELD_TERMINATOR);
-        (tag, data)
-    }
+    );
 }
 
-/// Allows you to build MARC records.
+/// Record builder.
+#[derive(Clone)]
 pub struct RecordBuilder {
-    record_status: RecordStatus,
-    type_of_record: TypeOfRecord,
-    bibliographic_level: BibliographicLevel,
-    type_of_control: TypeOfControl,
-    character_coding_scheme: CharacterCodingScheme,
-    encoding_level: EncodingLevel,
-    descriptive_cataloging_form: DescriptiveCatalogingForm,
-    multipart_resource_record_level: MultipartResourceRecordLevel,
+    leader: [u8; 24],
     fields: Vec<FieldRepr>,
-    size: u32,
 }
 
 impl RecordBuilder {
+    /// Creates default record builer
     pub fn new() -> RecordBuilder {
         RecordBuilder {
-            record_status: RecordStatus::IncreaseInEncodingLevel,
-            type_of_record: TypeOfRecord::LanguageMaterial,
-            bibliographic_level: BibliographicLevel::MonographicComponentPart,
-            type_of_control: TypeOfControl::NoSpecifiedType,
-            character_coding_scheme: CharacterCodingScheme::Marc8,
-            encoding_level: EncodingLevel::FullLevel,
-            descriptive_cataloging_form: DescriptiveCatalogingForm::NonIsbd,
-            multipart_resource_record_level: MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable,
-            fields: Vec::new(),
-            size: 24,
+            leader: *b"00000nam  2200000 i 4500",
+            fields: vec![],
         }
     }
-    pub fn from_record(rec: &Record) -> RecordBuilder {
-        let mut res = RecordBuilder {
-            record_status: rec.record_status.clone(),
-            type_of_record: rec.type_of_record.clone(),
-            bibliographic_level: rec.bibliographic_level.clone(),
-            type_of_control: rec.type_of_control.clone(),
-            character_coding_scheme: rec.character_coding_scheme.clone(),
-            encoding_level: rec.encoding_level.clone(),
-            descriptive_cataloging_form: rec.descriptive_cataloging_form.clone(),
-            multipart_resource_record_level: rec.multipart_resource_record_level.clone(),
-            fields: Vec::new(),
-            size: 24,
-        };
-        for field in rec.fields() {
-            res = res.add_field(field);
+
+    /// Creates record builder from existing record
+    pub fn from_record(record: &Record) -> RecordBuilder {
+        let mut leader = [0; 24];
+        leader.copy_from_slice(&record.as_ref()[0..24]);
+        let fields = record.fields().map(|f| FieldRepr::from(f)).collect();
+        RecordBuilder {
+            leader: leader,
+            fields: fields,
         }
-        res
     }
-    #[inline]
-    pub fn set_record_status(mut self, x: RecordStatus) -> RecordBuilder {
-        self.record_status = x; self
+
+    /// Iterator over fields of this builder.
+    pub fn iter_fields(&self) -> slice::Iter<FieldRepr> {
+        self.fields.iter()
     }
-    #[inline]
-    pub fn set_type_of_record(mut self, x: TypeOfRecord) -> RecordBuilder {
-        self.type_of_record = x; self
-    }
-    #[inline]
-    pub fn set_bibliographic_level(mut self, x: BibliographicLevel) -> RecordBuilder {
-        self.bibliographic_level = x; self
-    }
-    #[inline]
-    pub fn set_type_of_control(mut self, x: TypeOfControl) -> RecordBuilder {
-        self.type_of_control = x; self
-    }
-    #[inline]
-    pub fn set_character_coding_scheme(mut self, x: CharacterCodingScheme) -> RecordBuilder {
-        self.character_coding_scheme = x; self
-    }
-    #[inline]
-    pub fn set_encoding_level(mut self, x: EncodingLevel) -> RecordBuilder {
-        self.encoding_level = x; self
-    }
-    #[inline]
-    pub fn set_descriptive_cataloging_form(mut self, x: DescriptiveCatalogingForm) -> RecordBuilder {
-        self.descriptive_cataloging_form = x; self
-    }
-    #[inline]
-    pub fn set_multipart_resource_record_level(mut self, x: MultipartResourceRecordLevel) -> RecordBuilder {
-        self.multipart_resource_record_level = x; self
-    }
-    pub fn add_field<T: Into<FieldRepr>>(mut self, def: T) -> RecordBuilder {
-        let repr = def.into();
-        let mut index = 0;
-        self.size += repr.1.len() as u32 + 12;
-        for (i, f) in self.fields.iter().enumerate() {
-            if f.0 >= repr.0 {
-                index = i;
-                break;
-            }
+
+    /// A way to add field to this builder.
+    ///
+    /// ### Errors
+    ///
+    /// Will return error if field is larger than 9.999 bytes.
+    pub fn add_field<T: Into<FieldRepr>>(&mut self, f: T) -> Result<&mut Self> {
+        let repr = f.into();
+        if repr.get_data().len() + 1 > MAX_FIELD_LEN {
+            return Err(ErrorKind::FieldTooLarge(repr.get_tag()).into());
         }
-        self.fields.insert(index, repr);
+        self.fields.push(repr);
+        self.fields.sort_by_key(|f| f.get_tag());
+        Ok(self)
+    }
+
+    /// A way to add multiple fileds to this builder.
+    ///
+    /// ### Errors
+    ///
+    /// Will return error if any of fields is larger than 9.999 bytes.
+    pub fn add_fields<T: Into<FieldRepr>>(&mut self, fs: Vec<T>) -> Result<&mut Self> {
+        for f in fs {
+            try!(self.add_field(f));
+        }
+        Ok(self)
+    }
+
+    /// Will filter fields of this builder by `fun` predicate.
+    pub fn filter_fields<F>(&mut self, mut fun: F) -> &mut RecordBuilder
+    where F: FnMut(&Field) -> bool
+    {
+        let fields = self.fields.clone().into_iter()
+            .filter(|ref f| {
+                let f = Field::from_repr(f);
+                fun(&f)
+            })
+            .collect();
+        self.fields = fields;
         self
     }
-    /// Removes all fields with tag `tag`.
-    pub fn remove_field<T: Into<Tag> + Clone>(mut self, tag: T) -> RecordBuilder {
-        let tag = tag.into();
-        self.fields.retain(|field| {
-            field.0 != tag
-        });
+
+    /// Will filter subfields of this builder by `fun` predicate.
+    pub fn filter_subfields<F>(&mut self, mut fun: F) -> &mut Self
+        where F: FnMut(&Field, &Subfield) -> bool
+    {
+        let fields = self.fields.clone().into_iter()
+            .map(|f| {
+                let fld = Field::from_repr(&f);
+                f.filter_subfields(|sf| fun(&fld, &sf))
+            }).collect();
+        self.fields = fields;
         self
     }
-    pub fn into_record(self) -> Record {
-        let mut data = Vec::with_capacity(self.size as usize);
-        let _ = data.write_dec_num(5, self.size);
-        let _ = io::Write::write_all(&mut data, &[
-            self.record_status.to_byte(),
-            self.type_of_record.to_byte(),
-            self.bibliographic_level.to_byte(),
-            self.type_of_control.to_byte(),
-            self.character_coding_scheme.to_byte(),
-            b'2',
-            b'2',
-        ]);
-        let _ = data.write_dec_num(5, 24 + 12 * self.fields.len() as u32 + 1);
-        let _ = io::Write::write_all(&mut data, &[
-            self.encoding_level.to_byte(),
-            self.descriptive_cataloging_form.to_byte(),
-            self.multipart_resource_record_level.to_byte(),
-            b'4',
-            b'5',
-            b'0',
-            b'0',
-        ]);
+
+    /// Returns record.
+    ///
+    /// ### Errors
+    ///
+    /// Will return error if record length is greater than 99.999 bytes.
+    pub fn get_record(&self) -> Result<Record<'static>> {
+        let mut data: Vec<_> = self.leader.to_vec();
+
+        // leader + directory terminator + record terminator
+        let mut size = 24 + 1 + 1;
+        for f in self.fields.iter() {
+            // directory entry + field data length + field terminator
+            size += 12 + f.get_data().len() + 1;
+        }
+        if size > MAX_RECORD_LEN {
+            return Err(ErrorKind::RecordTooLarge(size).into());
+        }
+
+        // writing record length
+        &mut data[0..5].copy_from_slice(format!("{:05}", size).as_bytes());
+
+        // writing directory
         let mut offset = 0;
-        for field_repr in self.fields.iter() {
-            let _ = io::Write::write_all(&mut data, field_repr.0.borrow());
-            let _ = data.write_dec_num(4, field_repr.1.len() as u32);
-            let _ = data.write_dec_num(5, offset);
-            offset += field_repr.1.len() as u32;
+        for f in self.fields.iter() {
+            data.extend_from_slice(f.get_tag().as_ref());
+            // field data length + field terminator
+            data.extend_from_slice(format!("{:04}", f.get_data().len() + 1).as_bytes());
+            data.extend_from_slice(format!("{:05}", offset).as_bytes());
+            offset += f.get_data().len() + 1;
         }
         data.push(FIELD_TERMINATOR);
-        for (_, field_data) in self.fields.into_iter() {
-            data.extend(field_data);
+
+        // writing base address of data
+        let len = data.len();
+        &mut data[12..17].copy_from_slice(format!("{:05}", len).as_bytes());
+
+        // writing fields
+        for f in self.fields.iter() {
+            data.extend_from_slice(f.get_data());
+            data.push(FIELD_TERMINATOR);
         }
+
         data.push(RECORD_TERMINATOR);
-        Record::from_data(data).unwrap()
-    }
-}
 
-#[derive(Debug, PartialEq, Clone)]
-/// Parsed MARC record representation.
-pub struct Record {
-    length: u32,
-    base_address_of_data: u32,
-    indicator_count: u8,
-    subfield_code_count: u8,
-    length_of_field_len: u8,
-    starting_character_position_len: u8,
-    implementation_defined_portion_len: u8,
-    pub record_status: RecordStatus,
-    pub type_of_record: TypeOfRecord,
-    pub bibliographic_level: BibliographicLevel,
-    pub type_of_control: TypeOfControl,
-    pub character_coding_scheme: CharacterCodingScheme,
-    pub encoding_level: EncodingLevel,
-    pub descriptive_cataloging_form: DescriptiveCatalogingForm,
-    pub multipart_resource_record_level: MultipartResourceRecordLevel,
-    warnings: Vec<Warning>,
-    data: Vec<u8>,
-    directory_entryes: Option<Vec<DirectoryEntry>>,
-}
-
-impl Record {
-    pub fn from_vec(data: Vec<u8>) -> io::Result<Record> {
-        let record_length = try!((&data[..]).read_dec_num(5));
-        if record_length as usize != data.len() {
-            return Err(Error::new(Other, "Vector length does not equals record length"));
-        }
-
-        if data[data.len() - 1] != RECORD_TERMINATOR {
-            return Err(Error::new(Other, "Record does not ends with record terminator"));
-        }
-
-        Record::from_data(data)
-    }
-    fn from_data(data: Vec<u8>) -> io::Result<Record> {
-        let meta = {
-            let mut rec = &*data;
-            let record_length = try!(rec.read_dec_num(5));
-            let mut warnings = Vec::new();
-            let record_status = try!(rec.read_leader_field());
-            let type_of_record = try!(rec.read_leader_field());
-            let bibliographic_level = try!(rec.read_leader_field());
-            let type_of_control = try!(rec.read_leader_field());
-            let character_coding_scheme = try!(rec.read_leader_field());
-
-            let indicator_count = if let Ok(ic) = rec.read_dec_num(1) {
-                if ic != 2 {
-                    warnings.push(Warning::WrongIndicatorCount(Some(ic as u8)));
-                }
-                ic as u8
-            } else {
-                warnings.push(Warning::WrongIndicatorCount(None));
-                2
-            };
-
-            let subfield_code_count = if let Ok(scc) = rec.read_dec_num(1) {
-                if scc != 2 {
-                    warnings.push(Warning::WrongSubfieldCodeCount(Some(scc as u8)));
-                }
-                scc as u8
-            } else {
-                warnings.push(Warning::WrongSubfieldCodeCount(None));
-                2
-            };
-
-            let base_address_of_data = try!(rec.read_dec_num(5));
-            let encoding_level = try!(rec.read_leader_field());
-            let descriptive_cataloging_form = try!(rec.read_leader_field());
-            let multipart_resource_record_level = try!(rec.read_leader_field());
-
-            let length_of_field_len = if let Ok(lof) = rec.read_dec_num(1) {
-                if lof != 4 {
-                    warnings.push(Warning::WrongLengthOfFieldLen(Some(lof as u8)));
-                }
-                lof as u8
-            } else {
-                warnings.push(Warning::WrongLengthOfFieldLen(None));
-                4
-            };
-
-            let starting_character_position_len = if let Ok(scp) = rec.read_dec_num(1) {
-                if scp != 5 {
-                    warnings.push(Warning::WrongStartingCharacterPositionLen(Some(scp as u8)));
-                }
-                scp as u8
-            } else {
-                warnings.push(Warning::WrongStartingCharacterPositionLen(None));
-                5
-            };
-
-            let implementation_defined_portion_len = if let Ok(idp) = rec.read_dec_num(1) {
-                if idp != 0 {
-                    warnings.push(Warning::WrongImplementationDefinedPortionLen(Some(idp as u8)));
-                }
-                idp as u8
-            } else {
-                warnings.push(Warning::WrongImplementationDefinedPortionLen(None));
-                0
-            };
-            (
-                record_length,
-                base_address_of_data,
-                indicator_count,
-                subfield_code_count,
-                length_of_field_len,
-                starting_character_position_len,
-                implementation_defined_portion_len,
-                record_status,
-                type_of_record,
-                bibliographic_level,
-                type_of_control,
-                character_coding_scheme,
-                encoding_level,
-                descriptive_cataloging_form,
-                multipart_resource_record_level,
-                warnings,
-            )
+        let (data_offset, directory) = match Record::parse(&*data) {
+            Ok(Record {data: _, data_offset, directory}) => (data_offset, directory),
+            Err(err) => return Err(err),
         };
 
-        let mut record = Record {
-            length: meta.0,
-            base_address_of_data: meta.1,
-            indicator_count: meta.2,
-            subfield_code_count: meta.3,
-            length_of_field_len: meta.4,
-            starting_character_position_len: meta.5,
-            implementation_defined_portion_len: meta.6,
-            record_status: meta.7,
-            type_of_record: meta.8,
-            bibliographic_level: meta.9,
-            type_of_control: meta.10,
-            character_coding_scheme: meta.11,
-            encoding_level: meta.12,
-            descriptive_cataloging_form: meta.13,
-            multipart_resource_record_level: meta.14,
-            warnings: meta.15,
-            data: data,
-            directory_entryes: None,
-        };
-        try!(record.parse_directory());
-        Ok(record)
+        Ok(Record {
+            data: Cow::Owned(data),
+            data_offset: data_offset,
+            directory: directory,
+        })
     }
 
-    /// Returns iterator over fields of a record.
-    #[inline]
-    pub fn fields<'r>(&'r self) -> Fields<'r> {
-        Fields {
-            record: self,
-            vec_iter: self.directory_entryes.as_ref().unwrap().iter(),
-            remain: self.directory_entryes.as_ref().unwrap().len() as u32,
-        }
-    }
-
-    /// Returns fileds with tag `tag` or empty vec if no such fields.
-    pub fn get_field<'r, T: Into<Tag> + Clone>(&'r self, tag: T) -> Vec<Field<'r>> {
-        let tag = tag.into();
-        let mut field = Vec::new();
-        for x in self.directory_entryes.as_ref().unwrap().iter() {
-            if x.0 == tag {
-                field.push(Field::from_entry(self, x));
-            }
-        }
-        field
-    }
-
-    /// Returns a slice into data of a field.
-    #[inline]
-    pub fn as_slice(&self) -> &[u8] {
-        &self.data[..]
-    }
-
-    fn parse_directory(&mut self) -> io::Result<()> {
-        let directory_entryes_count = (self.base_address_of_data - 24) / 12;
-        let mut directory_entryes = Vec::with_capacity(directory_entryes_count as usize);
-        let mut dir = &self.data[24..(self.base_address_of_data as usize - 1)];
-        while dir.len() > 0 {
-            directory_entryes.push(try!(dir.read_directory_entry()));
-        }
-        self.directory_entryes = Some(directory_entryes);
-        Ok(())
-    }
+    getset!(RecordStatus, get_record_status, set_record_status, 5);
+    getset!(TypeOfRecord, get_type_of_record, set_type_of_record, 6);
+    getset!(BibliographicLevel, get_bibliographic_level, set_bibliographic_level, 7);
+    getset!(TypeOfControl, get_type_of_control, set_type_of_control, 8);
+    getset!(CharacterCodingScheme, get_character_coding_scheme, set_character_coding_scheme, 9);
+    getset!(EncodingLevel, get_encoding_level, set_encoding_level, 17);
+    getset!(DescriptiveCatalogingForm, get_descriptive_cataloging_form, set_descriptive_cataloging_form, 18);
+    getset!(MultipartResourceRecordLevel, get_multipart_resource_record_level, set_multipart_resource_record_level, 19);
 }
 
 macro_rules! leader_field(
@@ -984,17 +337,20 @@ macro_rules! leader_field(
             Unknown(u8),
         }
 
-        impl LeaderField for $name {
+        impl From<u8> for $name {
             #[inline]
-            fn from_byte(byte: u8) -> $name {
-                match byte {
+            fn from(x: u8) -> $name {
+                match x {
                     $($val => $name::$kind),+,
                     b => $name::Unknown(b),
                 }
             }
+        }
+
+        impl Into<u8> for $name {
             #[inline]
-            fn to_byte(&self) -> u8 {
-                match *self {
+            fn into(self) -> u8 {
+                match self {
                     $($name::$kind => $val),+,
                     $name::Unknown(b) => b,
                 }
@@ -1092,220 +448,369 @@ leader_field! {
     }
 }
 
+#[macro_export]
+/// Intended to use with `RecordBuilder::add_fields`.
+///
+/// ```ignore
+/// builder.add_fields(fields!(
+///     control fields: ["001" => "foo"];
+///     data fields: [
+///         "856", "41", [
+///             'q' = "bar",
+///             'u' => "baz",
+///         ],
+///     ]
+/// ));
+/// ```
+macro_rules! fields {
+    (
+        control fields: [$($ctag:expr => $cdata:expr),*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ ]; )
+    );
+
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*] ),* ];
+    ) => (
+        fields!( control fields: [ ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*] ),* ];
+    ) => (
+        fields!( control fields: [ ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*],)* ];
+    ) => (
+        fields!( control fields: [ ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*],)* ];
+    ) => (
+        fields!( control fields: [ ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*] ),* ];
+        control fields: [$($ctag:expr => $cdata:expr),*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*] ),* ];
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*] ),* ];
+        control fields: [$($ctag:expr => $cdata:expr),*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*] ),* ];
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*],)* ];
+        control fields: [$($ctag:expr => $cdata:expr),*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*],)* ];
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*],)* ];
+        control fields: [$($ctag:expr => $cdata:expr),*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*], )* ];
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+
+
+    (
+        control fields: [$($ctag:expr => $cdata:expr),*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*] ),* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*] ),* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr),*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*] ),* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*] ),* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr),*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*],)* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr),*],)* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr),*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*],)* ];
+    ) => (
+        fields!( control fields: [ $($ctag => $cdata,)* ];
+                 data fields: [ $($dtag, $dind, [ $($sfident => $sfdata,)* ],)* ]; )
+    );
+    (
+        control fields: [$($ctag:expr => $cdata:expr,)*];
+        data fields: [ $( $dtag:expr, $dind:expr, [$($sfident:expr => $sfdata:expr,)*], )* ];
+    ) => ({
+        let mut out = vec![];
+        $(out.push(
+            $crate::FieldRepr::from(
+                ($crate::Tag::from($ctag), Vec::<u8>::from($cdata))
+            )
+        );)*
+        $({
+            let mut sfs = vec![];
+            $(sfs.push(($crate::Identifier::from($sfident), Vec::<u8>::from($sfdata)));)*
+            out.push(
+                $crate::FieldRepr::from(
+                    ($crate::Tag::from($dtag), $crate::Indicator::from($dind), sfs)
+                )
+            )
+        })*
+        out
+    });
+
+}
+
 #[cfg(test)]
 mod tests {
-    const RECS: &'static str = "00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\x1e000000001\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d\
-                                00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
+    const RECS: &'static str = "00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
+                                \x1e000000001\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d\
+                                00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
+                                \x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
     const REC_SIZE: u64 = 963;
-    const FIELDS_COUNT: usize = 17;
     mod read {
+        use std::io;
         use super::RECS;
-        use super::FIELDS_COUNT;
+        use super::REC_SIZE;
         use super::super::*;
 
         #[test]
-        fn records() {
-            let mut recs = RECS.as_bytes();
-            let rec1 = recs.read_record().unwrap().unwrap();
-            assert_eq!(rec1.data, &RECS.as_bytes()[0..rec1.data.len()]);
-            assert_eq!(rec1.data.len(), 963);
-            let rec2 = recs.read_record().unwrap().unwrap();
-            assert_eq!(rec2.data.len(), 963);
-            assert_eq!(rec2.data, &RECS.as_bytes()[rec1.data.len()..]);
-            assert_eq!(None, recs.read_record().unwrap());
+        fn shoud_parse_record() {
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
         }
 
         #[test]
-        fn records_iter() {
-            let recs = RECS.as_bytes();
-            let it = Records::new(recs);
-            for (i, record) in it.enumerate() {
-                let record = record.unwrap();
-                match i {
-                    0 => {
-                        assert_eq!(record.data, &RECS.as_bytes()[0..record.data.len()]);
-                        assert_eq!(record.data.len(), 963);
-                    },
-                    1 => {
-                        assert_eq!(record.data.len(), 963);
-                        assert_eq!(record.data, &RECS.as_bytes()[963..]);
-                    },
-                    _ => unreachable!(),
-                }
-            }
+        fn should_read_record() {
+            let mut data = vec![];
+            data.extend_from_slice(RECS.as_bytes());
+            let mut input = io::Cursor::new(data);
+            let record = Record::read(&mut input).unwrap();
+            let record = record.unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
+            let record = Record::read(&mut input).unwrap();
+            let record = record.unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[REC_SIZE as usize..]);
+            let record = Record::read(&mut input).unwrap();
+            assert!(record.is_none());
         }
 
         #[test]
-        fn from_vec() {
-            use std::borrow::ToOwned;
+        fn should_get_field() {
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
-            let vec = (& RECS.as_bytes()[0..963]).to_owned();
-            let rec = Record::from_vec(vec).unwrap();
-            assert_eq!(rec.data, &RECS.as_bytes()[0..rec.data.len()]);
-            assert_eq!(rec.data.len(), 963);
+            let repr = FieldRepr::from(("001", "000000001"));
+            let fields = record.field("001");
+            assert_eq!(fields, vec![Field::from_repr(&repr)]);
+
+            let repr1 = FieldRepr::from(("979", "  \x1faautoref"));
+            let repr2 = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
+            let fields = record.field("979");
+            assert_eq!(fields, vec![
+                Field::from_repr(&repr1),
+                Field::from_repr(&repr2),
+            ]);
+
+            let fields = record.field("999");
+            assert_eq!(fields, vec![]);
         }
 
         #[test]
-        fn fields_iterator() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            let mut fields = rec.fields();
-            let hint = fields.size_hint();
-            assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-            assert_eq!(hint.0, FIELDS_COUNT);
-            let mut count = 0;
-            while let Some(field) = fields.next() {
-                count += 1;
-                let hint = fields.size_hint();
-                assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-                assert_eq!(hint.0, FIELDS_COUNT - count);
-                match count {
-                    01 => assert_eq!(Some(field.get_tag()), Some("001")),
-                    02 => assert_eq!(Some(field.get_tag()), Some("003")),
-                    03 => assert_eq!(Some(field.get_tag()), Some("003")),
-                    04 => assert_eq!(Some(field.get_tag()), Some("005")),
-                    05 => assert_eq!(Some(field.get_tag()), Some("008")),
-                    06 => assert_eq!(Some(field.get_tag()), Some("035")),
-                    07 => assert_eq!(Some(field.get_tag()), Some("040")),
-                    08 => assert_eq!(Some(field.get_tag()), Some("041")),
-                    09 => assert_eq!(Some(field.get_tag()), Some("072")),
-                    10 => assert_eq!(Some(field.get_tag()), Some("100")),
-                    11 => assert_eq!(Some(field.get_tag()), Some("245")),
-                    12 => assert_eq!(Some(field.get_tag()), Some("260")),
-                    13 => assert_eq!(Some(field.get_tag()), Some("300")),
-                    14 => assert_eq!(Some(field.get_tag()), Some("650")),
-                    15 => assert_eq!(Some(field.get_tag()), Some("856")),
-                    16 => assert_eq!(Some(field.get_tag()), Some("979")),
-                    17 => assert_eq!(Some(field.get_tag()), Some("979")),
-                    _ => assert!(false),
-                }
-            }
+        fn should_get_fields() {
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
+
+            let tags: Vec<Tag> = record.fields().map(|field| field.get_tag()).collect();
+            assert_eq!(tags, vec![
+                Tag::from("001"),
+                Tag::from("003"),
+                Tag::from("003"),
+                Tag::from("005"),
+                Tag::from("008"),
+                Tag::from("035"),
+                Tag::from("040"),
+                Tag::from("041"),
+                Tag::from("072"),
+                Tag::from("100"),
+                Tag::from("245"),
+                Tag::from("260"),
+                Tag::from("300"),
+                Tag::from("650"),
+                Tag::from("856"),
+                Tag::from("979"),
+                Tag::from("979"),
+            ]);
         }
 
         #[test]
-        fn control_field() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            assert_eq!(rec.get_field("001").len(), 1);
-            assert!(rec.get_field("001")[0].is_control_field());
-            assert_eq!(rec.get_field("001")[0].data, b"000000001\x1e");
-            assert_eq!(Some(rec.get_field("001")[0].get_tag()), Some(&b"001"[..]));
-            assert_eq!(rec.get_field("001")[0].get_data(), Some(&b"000000001"[..]));
-            assert_eq!(Some(rec.get_field("001")[0].get_tag()), Some("001"));
-            assert_eq!(rec.get_field("001")[0].get_data(), Some("000000001"));
-        }
+        fn sholud_build_record() {
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
-        #[test]
-        fn control_fields() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            assert_eq!(rec.get_field("003").len(), 2);
-            assert!(rec.get_field("003")[0].is_control_field());
-            assert_eq!(rec.get_field("003")[0].data, b"RuMoRGB\x1e");
-            assert_eq!(Some(rec.get_field("003")[0].get_tag()), Some(&b"003"[..]));
-            assert_eq!(rec.get_field("003")[0].get_data(), Some(&b"RuMoRGB"[..]));
-            assert_eq!(Some(rec.get_field("003")[0].get_tag()), Some("003"));
-            assert_eq!(rec.get_field("003")[0].get_data(), Some("RuMoRGB"));
-            assert!(rec.get_field("003")[1].is_control_field());
-            assert_eq!(rec.get_field("003")[1].data, b"EnMoRGB\x1e");
-            assert_eq!(Some(rec.get_field("003")[1].get_tag()), Some(&b"003"[..]));
-            assert_eq!(rec.get_field("003")[1].get_data(), Some(&b"EnMoRGB"[..]));
-            assert_eq!(Some(rec.get_field("003")[1].get_tag()), Some("003"));
-            assert_eq!(rec.get_field("003")[1].get_data(), Some("EnMoRGB"));
-        }
+            let mut builder = RecordBuilder::new();
+            builder.add_fields(fields!(
+                data fields: [
+                    "979", "  ", [
+                        'a' => "autoref",
+                    ],
+                    "979", "  ", [
+                        'b' => "autoreg",
+                        'b' => "autoreh",
+                    ],
+                    "856", "41" , [
+                        'q' => "application/pdf",
+                        'u' => "http://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf",
+                    ],
+                    "650", " 7", [
+                        'a' => "Всеобщая история",
+                        '2' => "nsnr",
+                    ],
+                    "300", "  ", [
+                        'a' => "24 c.",
+                        'b' => "ил",
+                    ],
+                    "260", "  ", [
+                        'a' => "Санкт-Петербург",
+                        'c' => "1992",
+                    ],
+                    "245", "00", [
+                        'a' => "Этносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :",
+                        'b' => "автореферат дис. ... кандидата исторических наук : 07.00.03",
+                    ],
+                    "100", "1 ", [
+                        'a' => "'Абд Ал-'Азиз Джа'фар Бин 'Акид",
+                    ],
+                    "072", " 7", [
+                        'a' => "07.00.03",
+                        '2' => "nsnr",
+                    ],
+                    "041", "0 ", [
+                        'a' => "rus",
+                    ],
+                    "040", "  ", [
+                        'a' => "RuMoRGB",
+                        'b' => "rus",
+                        'c' => "RuMoRGB",
+                    ],
+                    "035", "  ", [
+                        'a' => "(RuMoEDL)-92k71098",
+                        'f' => "filter",
+                    ],
+                ];
+                control fields: [
+                    "000" => "filter",
+                    "008" => "080528s1992    ru a|||  a    |00 u rus d",
+                    "005" => "20080528120000.0",
+                    "003" => "RuMoRGB",
+                    "003" => "EnMoRGB",
+                    "001" => "000000001",
+                ];
+            )).unwrap();
+            builder.set_record_status(record.record_status())
+                   .set_type_of_record(record.type_of_record())
+                   .set_bibliographic_level(record.bibliographic_level())
+                   .set_type_of_control(record.type_of_control())
+                   .set_character_coding_scheme(record.character_coding_scheme())
+                   .set_encoding_level(record.encoding_level())
+                   .set_descriptive_cataloging_form(record.descriptive_cataloging_form())
+                   .set_multipart_resource_record_level(record.multipart_resource_record_level());
+            builder.filter_fields(|f| f.get_tag() != "000".into());
+            builder.filter_subfields(|_, sf| sf.get_data::<[u8]>() != &b"filter"[..]);
 
-        #[test]
-        fn data_field() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            assert_eq!(rec.get_field("856").len(), 1);
-            assert!(rec.get_field("856")[0].is_data_field());
-            assert_eq!(Some(rec.get_field("856")[0].get_tag()), Some("856"));
-            assert_eq!(rec.get_field("856")[0].data, &b"41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e"[..]);
-            assert_eq!(rec.get_field("856")[0].get_indicator(), Some(['4', '1']));
-        }
-
-        #[test]
-        fn data_fields() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            assert_eq!(rec.get_field("979").len(), 2);
-            assert!(rec.get_field("979")[0].is_data_field());
-            assert_eq!(Some(rec.get_field("979")[0].get_tag()), Some("979"));
-            assert_eq!(rec.get_field("979")[0].data, b"  \x1faautoref\x1e");
-            assert_eq!(rec.get_field("979")[0].get_indicator(), Some([' ', ' ']));
-            assert!(rec.get_field("979")[1].is_data_field());
-            assert_eq!(Some(rec.get_field("979")[1].get_tag()), Some("979"));
-            assert_eq!(rec.get_field("979")[1].data, b"  \x1fbautoreg\x1fbautoreh\x1e");
-            assert_eq!(rec.get_field("979")[1].get_indicator(), Some([' ', ' ']));
-        }
-
-        #[test]
-        fn subfields_iterator() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            let ref field = rec.get_field("979")[0];
-            let mut subfields = field.subfields();
-            let hint = subfields.size_hint();
-            assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-            assert_eq!(hint.0, 1);
-            let mut count = 0;
-            while let Some(subfield) = subfields.next() {
-                count += 1;
-                let hint = subfields.size_hint();
-                assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-                assert_eq!(hint.0, 0);
-                match count {
-                    01 => {
-                        assert_eq!(subfield.get_identifier::<char>(), 'a');
-                        assert_eq!(subfield.get_data(), Some("autoref"));
-                    },
-                    _ => assert!(false),
-                }
-            }
-            let ref field = rec.get_field("979")[1];
-            let mut subfields = field.subfields();
-            let hint = subfields.size_hint();
-            assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-            assert_eq!(hint.0, 2);
-            let mut count = 0;
-            while let Some(subfield) = subfields.next() {
-                count += 1;
-                let hint = subfields.size_hint();
-                assert_eq!(hint.0, *hint.1.as_ref().unwrap());
-                assert_eq!(hint.0, 2 - count);
-                match count {
-                    01 => {
-                        assert_eq!(subfield.get_identifier::<char>(), 'b');
-                        assert_eq!(subfield.get_data(), Some("autoreg"));
-                    },
-                    02 => {
-                        assert_eq!(subfield.get_identifier::<char>(), 'b');
-                        assert_eq!(subfield.get_data(), Some("autoreh"));
-                    },
-                    _ => assert!(false),
-                }
-            }
-        }
-
-        #[test]
-        fn subfield() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            let ref field = rec.get_field("979")[0];
-            assert_eq!(field.get_subfield('a').len(), 1);
-            assert_eq!(field.get_subfield('a')[0].data, b"\x1faautoref");
-            assert_eq!(Some(field.get_subfield('a')[0].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('a')[0].get_identifier::<char>(), 'a');
-            assert_eq!(field.get_subfield('a')[0].get_data(), Some("autoref"));
-        }
-
-        #[test]
-        fn subfields() {
-            let rec = RECS.as_bytes().read_record().unwrap().unwrap();
-            let ref field = rec.get_field("979")[1];
-            assert_eq!(field.get_subfield('b').len(), 2);
-            assert_eq!(field.get_subfield('b')[0].data, b"\x1fbautoreg");
-            assert_eq!(Some(field.get_subfield('b')[0].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('b')[0].get_identifier::<char>(), 'b');
-            assert_eq!(field.get_subfield('b')[0].get_data(), Some("autoreg"));
-            assert_eq!(field.get_subfield('b')[1].data, b"\x1fbautoreh");
-            assert_eq!(Some(field.get_subfield('b')[1].get_tag()), Some("979"));
-            assert_eq!(field.get_subfield('b')[1].get_identifier::<char>(), 'b');
-            assert_eq!(field.get_subfield('b')[1].get_data(), Some("autoreh"));
+            assert_eq!(builder.get_record().unwrap().as_ref(), record.as_ref());
         }
     }
 
@@ -1319,7 +824,7 @@ mod tests {
         #[bench]
         fn read_record(b: &mut test::Bencher) {
             b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
+                if let Ok(rec) = Record::read(RECS.as_bytes()) {
                     if let Some(rec) = rec {
                         test::black_box(rec);
                     } else {
@@ -1331,60 +836,15 @@ mod tests {
         }
 
         #[bench]
-        fn read_record_get_field(b: &mut test::Bencher) {
+        fn parse_record(b: &mut test::Bencher) {
             b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        test::black_box(rec.get_field("979"));
-                    } else {
-                        panic!();
-                    }
+                if let Ok(rec) = Record::parse(RECS.as_bytes()) {
+                    test::black_box(rec);
+                } else {
+                    panic!();
                 }
             });
             b.bytes += REC_SIZE;
-        }
-
-        #[bench]
-        fn read_record_iter_fields(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        for field in rec.fields() {
-                            test::black_box(field);
-                        }
-                    } else {
-                        panic!();
-                    }
-                }
-            });
-            b.bytes += REC_SIZE;
-        }
-
-        #[bench]
-        fn read_record_iter_subfields(b: &mut test::Bencher) {
-            b.iter(|| {
-                if let Ok(rec) = RECS.as_bytes().read_record() {
-                    if let Some(rec) = rec {
-                        for field in rec.fields() {
-                            for subfield in field.subfields() {
-                                test::black_box(subfield);
-                            }
-                        }
-                    } else {
-                        panic!();
-                    }
-                }
-            });
-            b.bytes += REC_SIZE;
-        }
-
-        #[bench]
-        fn build_record_from_record(b: &mut test::Bencher)
-        {
-            let record = RECS.as_bytes().read_record().unwrap().unwrap();
-            b.iter(|| {
-                test::black_box(RecordBuilder::from_record(&record));
-            })
         }
     }
 }
