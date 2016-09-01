@@ -905,7 +905,7 @@ mod tests {
         #[bench]
         fn read_record(b: &mut test::Bencher) {
             b.iter(|| {
-                if let Ok(rec) = Record::read(RECS.as_bytes()) {
+                if let Ok(rec) = Record::read(&mut RECS.as_bytes()) {
                     if let Some(rec) = rec {
                         test::black_box(rec);
                     } else {
