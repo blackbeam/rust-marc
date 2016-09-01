@@ -59,6 +59,7 @@ macro_rules! get {
 ///
 /// It could be borrowed if it was parsed from a buffer or it could be owned if it was read from an
 /// `io::Read` implementor.
+#[derive(Debug, Clone)]
 pub struct Record<'a> {
     data: Cow<'a, [u8]>,
     data_offset: usize,

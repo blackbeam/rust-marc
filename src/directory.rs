@@ -3,6 +3,7 @@ use errors::*;
 use misc;
 use tag::Tag;
 
+#[derive(Debug, Clone)]
 pub struct Directory {
     pub entryes: Vec<(Tag, usize, usize)>,
 }
