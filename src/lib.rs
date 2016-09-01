@@ -90,6 +90,19 @@ impl<'a> Record<'a> {
         })
     }
 
+    /// Will crate owned record from vector of bytes.
+    pub fn from_vec<I>(input: I) -> Result<Record<'static>>
+    where I: Into<Vec<u8>>,
+    {
+        let data = input.into();
+        let Record {data_offset, directory, ..} = try!(Record::parse(&*data));
+        Ok(Record {
+            data: Cow::Owned(data),
+            data_offset: data_offset,
+            directory: directory,
+        })
+    }
+
     /// Will try to read a `Record` from an `io::Read` implementor.
     ///
     /// Will produce owned version of `Record`.
@@ -691,6 +704,20 @@ mod tests {
         #[test]
         fn shoud_parse_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
+        }
+
+        #[test]
+        fn should_create_record_from_vec() {
+            let record = Record::from_vec((&RECS.as_bytes()[..963]).to_vec()).unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
             assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
