@@ -106,6 +106,10 @@ impl<'a> Record<'a> {
         }
 
         let len = try!(misc::read_dec_5(&*data));
+        if len < 5 {
+            return Err(ErrorKind::RecordTooShort(len).into());
+        }
+
         data.reserve(len - 5);
         unsafe { data.set_len(len) };
         try!(input.read_exact(&mut data[5..len]).chain_err(|| ErrorKind::UnexpectedEof));
@@ -160,6 +164,45 @@ impl<'a> fmt::Display for Record<'a> {
             try!(writeln!(f, "Field: {} Data({})", field.get_tag(), field.get_data::<str>()));
         }
         Ok(())
+    }
+}
+
+/// Reads records from an `io::Read` implementor.
+pub struct Records<T>(T, bool);
+
+impl<T: io::Read> Records<T> {
+    pub fn new(input: T) -> Records<T> {
+        Records(input, false)
+    }
+
+    /// Unwraps `io::Read` implementor.
+    pub fn unwrap(self) -> T {
+        self.0
+    }
+}
+
+impl<T: io::Read> Iterator for Records<T> {
+    type Item = Result<Record<'static>>;
+
+    fn next(&mut self) -> Option<Result<Record<'static>>> {
+        if self.1 {
+            None
+        } else {
+            let result = Record::read(&mut self.0);
+            match result {
+                Ok(Some(record)) => {
+                    Some(Ok(record))
+                },
+                Ok(None) => {
+                    self.1 = true;
+                    None
+                },
+                Err(err) => {
+                    self.1 = true;
+                    Some(Err(err))
+                }
+            }
+        }
     }
 }
 
@@ -688,6 +731,44 @@ mod tests {
             assert_eq!(record.as_ref(), &RECS.as_bytes()[REC_SIZE as usize..]);
             let record = Record::read(&mut input).unwrap();
             assert!(record.is_none());
+        }
+
+        #[test]
+        fn should_iterate_records() {
+            let mut data = vec![];
+            data.extend_from_slice(RECS.as_bytes());
+            let input = io::Cursor::new(data);
+            let mut records = Records::new(input);
+
+            let record = records.next().unwrap().unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
+            let record = records.next().unwrap().unwrap();
+            assert_eq!(record.record_status(), RecordStatus::New);
+            assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
+            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
+            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
+            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
+            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(record.as_ref(), &RECS.as_bytes()[REC_SIZE as usize..]);
+            assert!(records.next().is_none());
+            assert!(records.next().is_none());
+
+            let data = &[0x30; 10];
+            let input = io::Cursor::new(data);
+            let mut records = Records::new(input);
+            assert!(records.next().unwrap().is_err());
+            assert!(records.next().is_none());
+
         }
 
         #[test]

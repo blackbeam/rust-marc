@@ -26,6 +26,10 @@ error_chain! {
             description("Record byte length is greater than 99999")
             display("Record byte length {} is greater than 99999 limit", size)
         }
+        RecordTooShort(len: usize) {
+            description("Record length specified in leader is too small")
+            display("Record length {} specified in leader is too small", len)
+        }
         UnexpectedSubfieldEnd {
             description("Unexpected end of a subfield")
         }
