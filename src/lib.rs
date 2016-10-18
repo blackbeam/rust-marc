@@ -142,7 +142,7 @@ impl<'a> Record<'a> {
     pub fn field<T: Into<tag::Tag>>(&self, tag: T) -> Vec<Field> {
         let tag = tag.into();
         let mut output = Vec::with_capacity(4);
-        for entry in self.directory.entryes.iter() {
+        for entry in self.directory.entries.iter() {
             if entry.0 == tag {
                 let offset = self.data_offset + entry.2;
                 output.push(Field::new(tag, &self.data[offset..offset + entry.1 - 1]));

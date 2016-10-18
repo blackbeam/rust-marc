@@ -5,18 +5,18 @@ use tag::Tag;
 
 #[derive(Debug, Clone)]
 pub struct Directory {
-    pub entryes: Vec<(Tag, usize, usize)>,
+    pub entries: Vec<(Tag, usize, usize)>,
 }
 
 impl Directory {
     pub fn parse(input: &[u8]) -> Result<Directory> {
-        let mut entryes = Vec::with_capacity(16);
+        let mut entries = Vec::with_capacity(16);
         for chunk in input.chunks(12) {
             if chunk.len() == 12 {
                 let tag = Tag::from(&chunk[0..3]);
                 let len = try!(misc::read_dec_4(&chunk[3..7]));
                 let offset = try!(misc::read_dec_5(&chunk[7..12]));
-                entryes.push((tag, len, offset));
+                entries.push((tag, len, offset));
             } else if chunk.len() == 1 && chunk[0] == FIELD_TERMINATOR {
                 break;
             } else {
@@ -24,7 +24,7 @@ impl Directory {
             }
         }
         Ok(Directory {
-            entryes: entryes,
+            entries: entries,
         })
     }
 }
@@ -42,7 +42,7 @@ mod test {
                      005001700026\
                      008004100043\x1e".to_vec();
         let dir = Directory::parse(&*data).unwrap();
-        assert_eq!(dir.entryes, vec!{
+        assert_eq!(dir.entries, vec!{
             (Tag::from(b"001"), 10usize,  0usize),
             (Tag::from(b"003"),  8, 10),
             (Tag::from(b"003"),  8, 18),
@@ -55,6 +55,6 @@ mod test {
     fn should_parse_empty_directory() {
         let data = b"\x1e".to_vec();
         let dir = Directory::parse(&*data).unwrap();
-        assert_eq!(dir.entryes, vec![]);
+        assert_eq!(dir.entries, vec![]);
     }
 }
