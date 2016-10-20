@@ -8,8 +8,11 @@ extern crate test;
 
 use std::borrow::{Borrow, Cow};
 use std::fmt;
+use std::fs::File;
 use std::io;
 use std::slice;
+
+use std::io::Write;
 
 mod directory;
 pub mod errors;
@@ -180,6 +183,26 @@ impl<'a> fmt::Display for Record<'a> {
         Ok(())
     }
 }
+
+/// Write Record Extension on io::Write
+pub trait WriteRecordExt: io::Write {
+    
+    /// write a record to a io::Write implementor
+    ///
+    /// returns the length of the written record
+    fn write_record(&mut self, record: Record) -> Result<usize>;
+}
+
+impl WriteRecordExt for File {
+
+    /// write a record to a file
+    fn write_record(&mut self, record: Record) -> Result<usize>{
+        self.write_all(record.as_ref());
+        
+        Ok(record.as_ref().len())
+    }
+}
+
 
 /// Reads records from an `io::Read` implementor.
 pub struct Records<T>(T, bool);
@@ -923,6 +946,48 @@ mod tests {
         }
     }
 
+    mod write {
+        use std::error::Error;
+        use std::fs::*;
+        use std::io::Read;
+        use std::path::Path;
+        use super::RECS;
+        use super::REC_SIZE;
+        use super::super::*;
+
+        #[test]
+        fn should_write_record_to_file() {
+            let mut out_file = match File::create(&Path::new("record.mrc")) {
+                Err(why) => panic!("Error: {}", why.description()),
+                Ok(file) => file,
+            };
+
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
+
+            match out_file.write_record(record.clone()) {
+                Err(why) => panic!("couldn't write file: {}", why.description()),
+                Ok(_) => (),
+            }
+
+            let mut in_file = match File::open(&Path::new("record.mrc")) {
+                Err(why) => panic!("Error: {}", why.description()),
+                Ok(file) => file,
+            };
+
+            let mut str = String::new();
+            let length = match in_file.read_to_string(&mut str) {
+                Err(why) => panic!("couldn't write file: {}", why.description()),
+                Ok(n) => n, 
+            };
+
+            remove_file("record.mrc").unwrap_or_else(|why| {
+                println!("! {:?}", why.kind());
+            });
+
+            assert_eq!(length, REC_SIZE as usize);
+        }
+    }
+    
     #[cfg(feature = "nightly")]
     mod bench {
         use test;
