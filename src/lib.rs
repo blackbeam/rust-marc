@@ -192,7 +192,6 @@ pub trait WriteRecordExt: io::Write {
 
 impl<T> WriteRecordExt for T where T: io::Write {
 
-    /// write a record to a file
     fn write_record(&mut self, record: Record) -> Result<()>{
         self.write_all(record.as_ref());
         Ok(())
