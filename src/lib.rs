@@ -187,14 +187,13 @@ pub trait WriteRecordExt: io::Write {
     /// write a record to a io::Write implementor
     ///
     /// returns the length of the written record
-    fn write_record(&mut self, record: Record) -> Result<()>;
+    fn write_record(&mut self, record: Record) -> io::Result<()>;
 }
 
 impl<T> WriteRecordExt for T where T: io::Write {
 
-    fn write_record(&mut self, record: Record) -> Result<()>{
-        self.write_all(record.as_ref());
-        Ok(())
+    fn write_record(&mut self, record: Record) -> io::Result<()>{
+        self.write_all(record.as_ref())
     }
 }
 
@@ -944,7 +943,6 @@ mod tests {
     mod write {
         use std::error::Error;
         use super::RECS;
-        use super::REC_SIZE;
         use super::super::*;
 
         #[test]
@@ -958,7 +956,8 @@ mod tests {
                 Ok(_) => (),
             }
 
-            assert_eq!(vec.len(), REC_SIZE as usize);
+            let record2 = Record::from_vec(vec).unwrap();
+            assert_eq!(record.as_ref(), record2.as_ref());
         }
     }
     
