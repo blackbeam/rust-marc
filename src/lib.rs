@@ -181,6 +181,23 @@ impl<'a> fmt::Display for Record<'a> {
     }
 }
 
+/// Write Record Extension on io::Write
+pub trait WriteRecordExt: io::Write {
+    
+    /// write a record to a io::Write implementor
+    ///
+    /// returns the length of the written record
+    fn write_record(&mut self, record: Record) -> io::Result<()>;
+}
+
+impl<T> WriteRecordExt for T where T: io::Write {
+
+    fn write_record(&mut self, record: Record) -> io::Result<()>{
+        self.write_all(record.as_ref())
+    }
+}
+
+
 /// Reads records from an `io::Read` implementor.
 pub struct Records<T>(T, bool);
 
@@ -923,6 +940,27 @@ mod tests {
         }
     }
 
+    mod write {
+        use std::error::Error;
+        use super::RECS;
+        use super::super::*;
+
+        #[test]
+        fn should_write_record() {
+            let mut vec = Vec::new();
+
+            let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
+
+            match vec.write_record(record.clone()) {
+                Err(why) => panic!("couldn't write file: {}", why.description()),
+                Ok(_) => (),
+            }
+
+            let record2 = Record::from_vec(vec).unwrap();
+            assert_eq!(record.as_ref(), record2.as_ref());
+        }
+    }
+    
     #[cfg(feature = "nightly")]
     mod bench {
         use test;
