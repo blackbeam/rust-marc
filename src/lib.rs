@@ -183,7 +183,6 @@ impl<'a> fmt::Display for Record<'a> {
 
 /// Write Record Extension on io::Write
 pub trait WriteRecordExt: io::Write {
-    
     /// write a record to a io::Write implementor
     ///
     /// returns the length of the written record
@@ -960,7 +959,7 @@ mod tests {
             assert_eq!(record.as_ref(), record2.as_ref());
         }
     }
-    
+
     #[cfg(feature = "nightly")]
     mod bench {
         use test;
