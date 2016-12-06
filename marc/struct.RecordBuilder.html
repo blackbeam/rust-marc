@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `RecordBuilder` struct in crate `marc`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, RecordBuilder">
+
+    <title>marc::RecordBuilder - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>marc</a></p><script>window.sidebarCurrent = {name: 'RecordBuilder', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>marc</a>::<wbr><a class='struct' href=''>RecordBuilder</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-1095' class='srclink' href='../src/marc/src/lib.rs.html#253-256' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct RecordBuilder { /* fields omitted */ }</pre><div class='docblock'><p>Record builder.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1104' class='srclink' href='../src/marc/src/lib.rs.html#258-401' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class='method'><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a></code></span></h4>
+<div class='docblock'><p>Creates default record builer</p>
+</div><h4 id='method.from_record' class='method'><span id='from_record.v' class='invisible'><code>fn <a href='#method.from_record' class='fnname'>from_record</a>(record: &amp;<a class='struct' href='../marc/struct.Record.html' title='marc::Record'>Record</a>) -&gt; <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a></code></span></h4>
+<div class='docblock'><p>Creates record builder from existing record</p>
+</div><h4 id='method.iter_fields' class='method'><span id='iter_fields.v' class='invisible'><code>fn <a href='#method.iter_fields' class='fnname'>iter_fields</a>(&amp;self) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/core/slice/struct.Iter.html' title='core::slice::Iter'>Iter</a>&lt;<a class='struct' href='../marc/struct.FieldRepr.html' title='marc::FieldRepr'>FieldRepr</a>&gt;</code></span></h4>
+<div class='docblock'><p>Iterator over fields of this builder.</p>
+</div><h4 id='method.add_field' class='method'><span id='add_field.v' class='invisible'><code>fn <a href='#method.add_field' class='fnname'>add_field</a>&lt;T:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/core/convert/trait.Into.html' title='core::convert::Into'>Into</a>&lt;<a class='struct' href='../marc/struct.FieldRepr.html' title='marc::FieldRepr'>FieldRepr</a>&gt;&gt;(&amp;mut self, f: T) -&gt; <a class='type' href='../marc/errors/type.Result.html' title='marc::errors::Result'>Result</a>&lt;&amp;mut Self&gt;</code></span></h4>
+<div class='docblock'><p>A way to add field to this builder.</p>
+
+<h3 id='errors' class='section-header'><a href='#errors'>Errors</a></h3>
+<p>Will return error if field is larger than 9.999 bytes.</p>
+</div><h4 id='method.add_fields' class='method'><span id='add_fields.v' class='invisible'><code>fn <a href='#method.add_fields' class='fnname'>add_fields</a>&lt;T:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/core/convert/trait.Into.html' title='core::convert::Into'>Into</a>&lt;<a class='struct' href='../marc/struct.FieldRepr.html' title='marc::FieldRepr'>FieldRepr</a>&gt;&gt;(&amp;mut self, fs: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;T&gt;) -&gt; <a class='type' href='../marc/errors/type.Result.html' title='marc::errors::Result'>Result</a>&lt;&amp;mut Self&gt;</code></span></h4>
+<div class='docblock'><p>A way to add multiple fileds to this builder.</p>
+
+<h3 id='errors-1' class='section-header'><a href='#errors-1'>Errors</a></h3>
+<p>Will return error if any of fields is larger than 9.999 bytes.</p>
+</div><h4 id='method.filter_fields' class='method'><span id='filter_fields.v' class='invisible'><code>fn <a href='#method.filter_fields' class='fnname'>filter_fields</a>&lt;F&gt;(&amp;mut self, fun: F) -&gt; &amp;mut <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a> <span class='where'>where F: <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.FnMut.html' title='core::ops::FnMut'>FnMut</a>(&amp;<a class='struct' href='../marc/struct.Field.html' title='marc::Field'>Field</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></span></code></span></h4>
+<div class='docblock'><p>Will filter fields of this builder by <code>fun</code> predicate.</p>
+</div><h4 id='method.filter_subfields' class='method'><span id='filter_subfields.v' class='invisible'><code>fn <a href='#method.filter_subfields' class='fnname'>filter_subfields</a>&lt;F&gt;(&amp;mut self, fun: F) -&gt; &amp;mut Self <span class='where'>where F: <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.FnMut.html' title='core::ops::FnMut'>FnMut</a>(&amp;<a class='struct' href='../marc/struct.Field.html' title='marc::Field'>Field</a>, &amp;<a class='struct' href='../marc/struct.Subfield.html' title='marc::Subfield'>Subfield</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></span></code></span></h4>
+<div class='docblock'><p>Will filter subfields of this builder by <code>fun</code> predicate.</p>
+</div><h4 id='method.get_record' class='method'><span id='get_record.v' class='invisible'><code>fn <a href='#method.get_record' class='fnname'>get_record</a>(&amp;self) -&gt; <a class='type' href='../marc/errors/type.Result.html' title='marc::errors::Result'>Result</a>&lt;<a class='struct' href='../marc/struct.Record.html' title='marc::Record'>Record</a>&lt;'static&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns record.</p>
+
+<h3 id='errors-2' class='section-header'><a href='#errors-2'>Errors</a></h3>
+<p>Will return error if record length is greater than 99.999 bytes.</p>
+</div><h4 id='method.get_record_status' class='method'><span id='get_record_status.v' class='invisible'><code>fn <a href='#method.get_record_status' class='fnname'>get_record_status</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.RecordStatus.html' title='marc::RecordStatus'>RecordStatus</a></code></span></h4>
+<h4 id='method.set_record_status' class='method'><span id='set_record_status.v' class='invisible'><code>fn <a href='#method.set_record_status' class='fnname'>set_record_status</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.RecordStatus.html' title='marc::RecordStatus'>RecordStatus</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_type_of_record' class='method'><span id='get_type_of_record.v' class='invisible'><code>fn <a href='#method.get_type_of_record' class='fnname'>get_type_of_record</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.TypeOfRecord.html' title='marc::TypeOfRecord'>TypeOfRecord</a></code></span></h4>
+<h4 id='method.set_type_of_record' class='method'><span id='set_type_of_record.v' class='invisible'><code>fn <a href='#method.set_type_of_record' class='fnname'>set_type_of_record</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.TypeOfRecord.html' title='marc::TypeOfRecord'>TypeOfRecord</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_bibliographic_level' class='method'><span id='get_bibliographic_level.v' class='invisible'><code>fn <a href='#method.get_bibliographic_level' class='fnname'>get_bibliographic_level</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.BibliographicLevel.html' title='marc::BibliographicLevel'>BibliographicLevel</a></code></span></h4>
+<h4 id='method.set_bibliographic_level' class='method'><span id='set_bibliographic_level.v' class='invisible'><code>fn <a href='#method.set_bibliographic_level' class='fnname'>set_bibliographic_level</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.BibliographicLevel.html' title='marc::BibliographicLevel'>BibliographicLevel</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_type_of_control' class='method'><span id='get_type_of_control.v' class='invisible'><code>fn <a href='#method.get_type_of_control' class='fnname'>get_type_of_control</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.TypeOfControl.html' title='marc::TypeOfControl'>TypeOfControl</a></code></span></h4>
+<h4 id='method.set_type_of_control' class='method'><span id='set_type_of_control.v' class='invisible'><code>fn <a href='#method.set_type_of_control' class='fnname'>set_type_of_control</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.TypeOfControl.html' title='marc::TypeOfControl'>TypeOfControl</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_character_coding_scheme' class='method'><span id='get_character_coding_scheme.v' class='invisible'><code>fn <a href='#method.get_character_coding_scheme' class='fnname'>get_character_coding_scheme</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.CharacterCodingScheme.html' title='marc::CharacterCodingScheme'>CharacterCodingScheme</a></code></span></h4>
+<h4 id='method.set_character_coding_scheme' class='method'><span id='set_character_coding_scheme.v' class='invisible'><code>fn <a href='#method.set_character_coding_scheme' class='fnname'>set_character_coding_scheme</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.CharacterCodingScheme.html' title='marc::CharacterCodingScheme'>CharacterCodingScheme</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_encoding_level' class='method'><span id='get_encoding_level.v' class='invisible'><code>fn <a href='#method.get_encoding_level' class='fnname'>get_encoding_level</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.EncodingLevel.html' title='marc::EncodingLevel'>EncodingLevel</a></code></span></h4>
+<h4 id='method.set_encoding_level' class='method'><span id='set_encoding_level.v' class='invisible'><code>fn <a href='#method.set_encoding_level' class='fnname'>set_encoding_level</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.EncodingLevel.html' title='marc::EncodingLevel'>EncodingLevel</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_descriptive_cataloging_form' class='method'><span id='get_descriptive_cataloging_form.v' class='invisible'><code>fn <a href='#method.get_descriptive_cataloging_form' class='fnname'>get_descriptive_cataloging_form</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.DescriptiveCatalogingForm.html' title='marc::DescriptiveCatalogingForm'>DescriptiveCatalogingForm</a></code></span></h4>
+<h4 id='method.set_descriptive_cataloging_form' class='method'><span id='set_descriptive_cataloging_form.v' class='invisible'><code>fn <a href='#method.set_descriptive_cataloging_form' class='fnname'>set_descriptive_cataloging_form</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.DescriptiveCatalogingForm.html' title='marc::DescriptiveCatalogingForm'>DescriptiveCatalogingForm</a>) -&gt; &amp;mut Self</code></span></h4>
+<h4 id='method.get_multipart_resource_record_level' class='method'><span id='get_multipart_resource_record_level.v' class='invisible'><code>fn <a href='#method.get_multipart_resource_record_level' class='fnname'>get_multipart_resource_record_level</a>(&amp;self) -&gt; <a class='enum' href='../marc/enum.MultipartResourceRecordLevel.html' title='marc::MultipartResourceRecordLevel'>MultipartResourceRecordLevel</a></code></span></h4>
+<h4 id='method.set_multipart_resource_record_level' class='method'><span id='set_multipart_resource_record_level.v' class='invisible'><code>fn <a href='#method.set_multipart_resource_record_level' class='fnname'>set_multipart_resource_record_level</a>(&amp;mut self, x: <a class='enum' href='../marc/enum.MultipartResourceRecordLevel.html' title='marc::MultipartResourceRecordLevel'>MultipartResourceRecordLevel</a>) -&gt; &amp;mut Self</code></span></h4>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> for <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1099' class='srclink' href='../src/marc/src/lib.rs.html#252' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.clone' class='method'><span id='clone.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone' class='fnname'>clone</a>(&amp;self) -&gt; <a class='struct' href='../marc/struct.RecordBuilder.html' title='marc::RecordBuilder'>RecordBuilder</a></code></span></h4>
+<div class='docblock'><p>Returns a copy of the value. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone">Read more</a></p>
+</div><h4 id='method.clone_from' class='method'><span id='clone_from.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from' class='fnname'>clone_from</a>(&amp;mut self, source: &amp;Self)</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Performs copy-assignment from <code>source</code>. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from">Read more</a></p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "marc";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>
