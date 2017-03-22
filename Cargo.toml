@@ -39,4 +39,4 @@ default = []
 nightly = []
 
 [dependencies]
-error-chain = "^0.7.0"
+error-chain = "^0.10.0"
