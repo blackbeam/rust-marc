@@ -1,12 +1,12 @@
-use Identifier;
+use crate::Identifier;
 
 pub mod subfields;
 
-use field::{
+use crate::field::{
     Field,
     FromFieldData,
 };
-use tag::Tag;
+use crate::tag::Tag;
 
 /// View into a subfield of a MARC field
 #[derive(Eq, PartialEq, Clone)]
@@ -49,8 +49,7 @@ impl<'a> Subfield<'a> {
 
 #[cfg(test)]
 mod test {
-    use field::Field;
-    use field::FieldRepr;
+    use crate::field::{Field, FieldRepr};
 
     #[test]
     fn should_find_subfields() {

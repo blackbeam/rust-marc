@@ -1,7 +1,7 @@
-use FIELD_TERMINATOR;
-use errors::*;
-use misc;
-use tag::Tag;
+use crate::FIELD_TERMINATOR;
+use crate::errors::*;
+use crate::misc;
+use crate::tag::Tag;
 
 #[derive(Debug, Clone)]
 pub struct Directory {
@@ -14,13 +14,13 @@ impl Directory {
         for chunk in input.chunks(12) {
             if chunk.len() == 12 {
                 let tag = Tag::from(&chunk[0..3]);
-                let len = try!(misc::read_dec_4(&chunk[3..7]));
-                let offset = try!(misc::read_dec_5(&chunk[7..12]));
+                let len = misc::read_dec_4(&chunk[3..7])?;
+                let offset = misc::read_dec_5(&chunk[7..12])?;
                 entries.push((tag, len, offset));
             } else if chunk.len() == 1 && chunk[0] == FIELD_TERMINATOR {
                 break;
             } else {
-                return Err(ErrorKind::UnexpectedEofInDirectory.into());
+                return Err(Error::UnexpectedEofInDirectory);
             }
         }
         Ok(Directory {
@@ -31,7 +31,7 @@ impl Directory {
 
 #[cfg(test)]
 mod test {
-    use tag::Tag;
+    use crate::tag::Tag;
     use super::Directory;
 
     #[test]

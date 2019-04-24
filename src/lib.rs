@@ -1,8 +1,6 @@
 #![cfg_attr(feature = "nightly", feature(test))]
 #![recursion_limit = "1024"]
 
-#[macro_use]
-extern crate error_chain;
 #[cfg(feature = "nightly")]
 extern crate test;
 
@@ -71,18 +69,18 @@ impl<'a> Record<'a> {
     ///
     /// Will borrow an `input` for the lifetime of a produced record.
     pub fn parse<'x>(input: &'x [u8]) -> Result<Record<'x>> {
-        let len = try!(misc::read_dec_5(input));
+        let len = misc::read_dec_5(input)?;
         if input.len() < len {
-            return Err(ErrorKind::UnexpectedEof.into());
+            return Err(Error::UnexpectedEof);
         }
 
         let data = &input[..len];
         if data[len - 1] != RECORD_TERMINATOR {
-            return Err(ErrorKind::NoRecordTerminator.into());
+            return Err(Error::NoRecordTerminator);
         }
 
-        let data_offset = try!(misc::read_dec_5(&data[12..17]));
-        let directory = try!(Directory::parse(&data[24..data_offset]));
+        let data_offset = misc::read_dec_5(&data[12..17])?;
+        let directory = Directory::parse(&data[24..data_offset])?;
 
         Ok(Record {
             data: Cow::Borrowed(data),
@@ -92,13 +90,22 @@ impl<'a> Record<'a> {
     }
 
     /// Will crate owned record from vector of bytes.
+    ///
+    /// # Panic
+    /// Will check that input length equals the record length.
     pub fn from_vec<I>(input: I) -> Result<Record<'static>>
     where I: Into<Vec<u8>>,
     {
-        let data = input.into();
-        let Record {data_offset, directory, ..} = try!(Record::parse(&*data));
+        let input = input.into();
+
+        let (data_offset, directory) = {
+            let Record {data_offset, directory, data} = Record::parse(&*input)?;
+            assert_eq!(input.len(), data.as_ref().len());
+            (data_offset, directory)
+        };
+
         Ok(Record {
-            data: Cow::Owned(data),
+            data: Cow::Owned(input),
             data_offset: data_offset,
             directory: directory,
         })
@@ -106,30 +113,29 @@ impl<'a> Record<'a> {
 
     /// Will try to read a `Record` from an `io::Read` implementor.
     ///
-    /// Will produce owned version of `Record`.
-    pub fn read<T: io::Read>(mut input: &mut T) -> Result<Option<Record<'static>>> {
+    /// Will return `None` if reader is empty.
+    pub fn read<T: io::Read>(input: &mut T) -> Result<Option<Record<'static>>> {
         let mut data = vec![0; 5];
-        match input.read_exact(&mut *data) {
-            Ok(_) => (),
-            Err(ref err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-                return Ok(None);
-            },
-            Err(err) => {
-                return Err(err).chain_err(|| ErrorKind::UnexpectedEof);
-            }
+
+        match input.read(&mut data[..1])? {
+            0 => return Ok(None),
+            _ => (),
         }
 
-        let len = try!(misc::read_dec_5(&*data));
+        input.read_exact(&mut data[1..])?;
+
+        let len = misc::read_dec_5(&*data)?;
+
         if len < 5 {
-            return Err(ErrorKind::RecordTooShort(len).into());
+            return Err(Error::RecordTooShort(len));
         }
 
         data.reserve(len - 5);
         unsafe { data.set_len(len) };
-        try!(input.read_exact(&mut data[5..len]).chain_err(|| ErrorKind::UnexpectedEof));
+        input.read_exact(&mut data[5..len])?;
 
-        let data_offset = try!(misc::read_dec_5(&data[12..17]));
-        let directory = try!(Directory::parse(&data[24..data_offset]));
+        let data_offset = misc::read_dec_5(&data[12..17])?;
+        let directory = Directory::parse(&data[24..data_offset])?;
 
         Ok(Some(Record {
             data: Cow::Owned(data),
@@ -173,9 +179,9 @@ impl<'a> Record<'a> {
 
 impl<'a> fmt::Display for Record<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(writeln!(f, "Leader: {}", String::from_utf8_lossy(&self.as_ref()[0..24])));
+        writeln!(f, "Leader: {}", String::from_utf8_lossy(&self.as_ref()[0..24]))?;
         for field in self.fields() {
-            try!(writeln!(f, "Field: {} Data({})", field.get_tag(), field.get_data::<str>()));
+            writeln!(f, "Field: {} Data({})", field.get_tag(), field.get_data::<str>())?;
         }
         Ok(())
     }
@@ -288,7 +294,7 @@ impl RecordBuilder {
     pub fn add_field<T: Into<FieldRepr>>(&mut self, f: T) -> Result<&mut Self> {
         let repr = f.into();
         if repr.get_data().len() + 1 > MAX_FIELD_LEN {
-            return Err(ErrorKind::FieldTooLarge(repr.get_tag()).into());
+            return Err(Error::FieldTooLarge(repr.get_tag()));
         }
         self.fields.push(repr);
         self.fields.sort_by_key(|f| f.get_tag());
@@ -302,7 +308,7 @@ impl RecordBuilder {
     /// Will return error if any of fields is larger than 9.999 bytes.
     pub fn add_fields<T: Into<FieldRepr>>(&mut self, fs: Vec<T>) -> Result<&mut Self> {
         for f in fs {
-            try!(self.add_field(f));
+            self.add_field(f)?;
         }
         Ok(self)
     }
@@ -349,7 +355,7 @@ impl RecordBuilder {
             size += 12 + f.get_data().len() + 1;
         }
         if size > MAX_RECORD_LEN {
-            return Err(ErrorKind::RecordTooLarge(size).into());
+            return Err(Error::RecordTooLarge(size));
         }
 
         // writing record length

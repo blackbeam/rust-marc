@@ -9,6 +9,7 @@ documentation = "https://blackbeam.github.io/rust-marc"
 readme = "README.md"
 keywords = ["MARC", "MARC21", "bibliographic", "parser", "builder"]
 exclude = [".*"]
+edition = "2018"
 
 [lib]
 name = "marc"
@@ -37,6 +38,3 @@ debug = false
 [features]
 default = []
 nightly = []
-
-[dependencies]
-error-chain = "^0.10.0"

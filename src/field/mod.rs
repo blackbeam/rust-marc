@@ -4,16 +4,14 @@ pub mod subfield;
 use std::fmt;
 use std::str;
 
-use MAX_FIELD_LEN;
-use SUBFIELD_DELIMITER;
-use errors::*;
-use Identifier;
-use Indicator;
-use Tag;
+use crate::MAX_FIELD_LEN;
+use crate::SUBFIELD_DELIMITER;
+use crate::errors::*;
+use crate::Identifier;
+use crate::Indicator;
+use crate::Tag;
 use self::subfield::Subfield;
 use self::subfield::subfields::Subfields;
-
-
 /// View into a field of a MARC record
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Field<'a> {
@@ -83,7 +81,7 @@ impl FieldRepr {
         new_data.push(identifier.into().into());
         new_data.extend_from_slice(f_data.as_ref());
         if new_data.len() + 1 > MAX_FIELD_LEN {
-            return Err(ErrorKind::FieldTooLarge(self.tag).into());
+            return Err(Error::FieldTooLarge(self.tag));
         }
         Ok(FieldRepr {
             tag: self.tag,
@@ -192,7 +190,7 @@ impl FromFieldData for str {
 
 #[cfg(test)]
 mod test {
-    use field::FieldRepr;
+    use crate::field::FieldRepr;
 
     #[test]
     fn should_filter_subfields() {

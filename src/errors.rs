@@ -1,37 +1,46 @@
-use tag::Tag;
+use std::fmt;
+use std::io;
 
-error_chain! {
-    errors {
-        UnexpectedByteInDecNum(byte: u8) {
-            description("Unexpected byte in decimal number")
-            display("Unexpected byte in decimal string: {}", byte)
+use crate::tag::Tag;
+
+pub type Result<T> = ::std::result::Result<T, Error>;
+
+/// Errors of this crate.
+#[derive(Debug)]
+pub enum Error {
+    UnexpectedByteInDecNum(u8),
+    FieldTooLarge(Tag),
+    RecordTooLarge(usize),
+    RecordTooShort(usize),
+    UnexpectedEofInDecNum,
+    UnexpectedEof,
+    UnexpectedEofInDirectory,
+    NoRecordTerminator,
+    UnexpectedSubfieldEnd,
+    Io(io::ErrorKind),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::UnexpectedByteInDecNum(byte) => write!(f, "Unexpected byte in decimal string: {}", byte),
+            Error::FieldTooLarge(tag) => write!(f, "Field byte length is greater than 9998 (tag={})", tag),
+            Error::RecordTooLarge(size) => write!(f, "Record byte length {} is greater than 99999 limit", size),
+            Error::RecordTooShort(len) => write!(f, "Record length {} specified in leader is too small", len),
+            Error::UnexpectedEofInDecNum => write!(f, "Unexpected EOF while reading decimal number"),
+            Error::UnexpectedEof => write!(f, "Unexpected EOF"),
+            Error::UnexpectedEofInDirectory => write!(f, "Unexpected EOF while reading directory"),
+            Error::NoRecordTerminator => write!(f, "No record terminator"),
+            Error::UnexpectedSubfieldEnd => write!(f, "Unexpected end of a subfield"),
+            Error::Io(err) => write!(f, "IO error: {:?}", err),
         }
-        UnexpectedEofInDecNum {
-            description("Unexpected EOF while reading decimal number")
-        }
-        UnexpectedEof {
-            description("Unexpected EOF")
-        }
-        UnexpectedEofInDirectory {
-            description("Unexpected EOF while reading directory")
-        }
-        NoRecordTerminator {
-            description("No record terminator")
-        }
-        FieldTooLarge(tag: Tag) {
-            description("Field byte length is greater than 9998")
-            display("Field byte length is greater than 9998 (tag={})", tag)
-        }
-        RecordTooLarge(size: usize) {
-            description("Record byte length is greater than 99999")
-            display("Record byte length {} is greater than 99999 limit", size)
-        }
-        RecordTooShort(len: usize) {
-            description("Record length specified in leader is too small")
-            display("Record length {} specified in leader is too small", len)
-        }
-        UnexpectedSubfieldEnd {
-            description("Unexpected end of a subfield")
-        }
+    }
+}
+
+impl ::std::error::Error for Error {}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::Io(err.kind())
     }
 }

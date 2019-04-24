@@ -1,4 +1,4 @@
-use tag::Tag;
+use crate::tag::Tag;
 
 /// View into a subfield of a MARC field
 pub struct Subfield<'a> {

@@ -1,6 +1,6 @@
-use field::Field;
-use field::subfield::Subfield;
-use SUBFIELD_DELIMITER;
+use crate::field::Field;
+use crate::field::subfield::Subfield;
+use crate::SUBFIELD_DELIMITER;
 
 /// Iterator over subfields of a field.
 #[derive(Eq, PartialEq, Clone)]
@@ -93,8 +93,7 @@ enum State {
 
 #[cfg(test)]
 mod test {
-    use field::Field;
-    use field::FieldRepr;
+    use crate::field::{Field, FieldRepr};
 
     #[test]
     fn should_iterate_subfields() {
