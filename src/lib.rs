@@ -567,7 +567,6 @@ macro_rules! leader_field(
         }
 
         impl From<u8> for $name {
-            #[inline]
             fn from(x: u8) -> $name {
                 match x {
                     $($val => $name::$kind),+,
@@ -577,7 +576,6 @@ macro_rules! leader_field(
         }
 
         impl From<$name> for u8 {
-            #[inline]
             fn from(x: $name) -> u8 {
                 match x {
                     $($name::$kind => $val),+,
