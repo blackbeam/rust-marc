@@ -20,7 +20,7 @@ impl Directory {
                 return Err(Error::UnexpectedEofInDirectory);
             }
         }
-        Ok(Directory { entries: entries })
+        Ok(Directory { entries })
     }
 }
 

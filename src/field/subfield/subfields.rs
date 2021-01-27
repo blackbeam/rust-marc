@@ -29,7 +29,7 @@ impl<'a> Iterator for Subfields<'a> {
                 self.state = State::Start(2);
                 self.next()
             }
-            State::Start(offset) => match self.field.data.get(offset).map(|x| *x) {
+            State::Start(offset) => match self.field.data.get(offset).copied() {
                 Some(SUBFIELD_DELIMITER) => {
                     self.state = State::SubfieldStart(offset + 1);
                     self.next()
@@ -40,7 +40,7 @@ impl<'a> Iterator for Subfields<'a> {
                 }
             },
             State::SubfieldStart(offset) => {
-                match self.field.data.get(offset).map(|x| *x) {
+                match self.field.data.get(offset).copied() {
                     Some(SUBFIELD_DELIMITER) | None => {
                         // Subfield ends unexpectedly
                         self.state = State::Done;
@@ -53,7 +53,7 @@ impl<'a> Iterator for Subfields<'a> {
                 }
             }
             State::Subfield(identifier, start, offset) => {
-                match self.field.data.get(start + offset).map(|x| *x) {
+                match self.field.data.get(start + offset).copied() {
                     Some(SUBFIELD_DELIMITER) => {
                         self.state = State::SubfieldStart(start + offset + 1);
                         Some(Subfield {

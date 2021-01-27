@@ -68,7 +68,7 @@ impl<'a> Record<'a> {
     /// Will try to parse record from a buffer.
     ///
     /// Will borrow an `input` for the lifetime of a produced record.
-    pub fn parse<'x>(input: &'x [u8]) -> Result<Record<'x>> {
+    pub fn parse(input: &[u8]) -> Result<Record<'_>> {
         let len = misc::read_dec_5(input)?;
         if input.len() < len {
             return Err(Error::UnexpectedEof);
@@ -84,8 +84,8 @@ impl<'a> Record<'a> {
 
         Ok(Record {
             data: Cow::Borrowed(data),
-            data_offset: data_offset,
-            directory: directory,
+            data_offset,
+            directory,
         })
     }
 
@@ -111,8 +111,8 @@ impl<'a> Record<'a> {
 
         Ok(Record {
             data: Cow::Owned(input),
-            data_offset: data_offset,
-            directory: directory,
+            data_offset,
+            directory,
         })
     }
 
@@ -122,9 +122,8 @@ impl<'a> Record<'a> {
     pub fn read<T: io::Read>(input: &mut T) -> Result<Option<Record<'static>>> {
         let mut data = vec![0; 5];
 
-        match input.read(&mut data[..1])? {
-            0 => return Ok(None),
-            _ => (),
+        if let 0 = input.read(&mut data[..1])? {
+            return Ok(None);
         }
 
         input.read_exact(&mut data[1..])?;
@@ -144,8 +143,8 @@ impl<'a> Record<'a> {
 
         Ok(Some(Record {
             data: Cow::Owned(data),
-            data_offset: data_offset,
-            directory: directory,
+            data_offset,
+            directory,
         }))
     }
 
@@ -163,13 +162,8 @@ impl<'a> Record<'a> {
     }
 
     /// Will return iterator over fields of a record
-    pub fn fields<'r>(&'r self) -> Fields<'r> {
+    pub fn fields(&self) -> Fields<'_> {
         Fields::new(self)
-    }
-
-    /// View into a data of a record.
-    pub fn as_ref(&self) -> &[u8] {
-        self.data.borrow()
     }
 
     get!(RecordStatus, record_status, 5);
@@ -184,6 +178,12 @@ impl<'a> Record<'a> {
         multipart_resource_record_level,
         19
     );
+}
+
+impl AsRef<[u8]> for Record<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.data.borrow()
+    }
 }
 
 impl<'a> fmt::Display for Record<'a> {
@@ -291,11 +291,8 @@ impl RecordBuilder {
     pub fn from_record(record: &Record) -> RecordBuilder {
         let mut leader = [0; 24];
         leader.copy_from_slice(&record.as_ref()[0..24]);
-        let fields = record.fields().map(|f| FieldRepr::from(f)).collect();
-        RecordBuilder {
-            leader: leader,
-            fields: fields,
-        }
+        let fields = record.fields().map(FieldRepr::from).collect();
+        RecordBuilder { leader, fields }
     }
 
     /// Iterator over fields of this builder.
@@ -385,7 +382,7 @@ impl RecordBuilder {
         }
 
         // writing record length
-        &mut data[0..5].copy_from_slice(format!("{:05}", size).as_bytes());
+        data[0..5].copy_from_slice(format!("{:05}", size).as_bytes());
 
         // writing directory
         let mut offset = 0;
@@ -400,7 +397,7 @@ impl RecordBuilder {
 
         // writing base address of data
         let len = data.len();
-        &mut data[12..17].copy_from_slice(format!("{:05}", len).as_bytes());
+        data[12..17].copy_from_slice(format!("{:05}", len).as_bytes());
 
         // writing fields
         for f in self.fields.iter() {
@@ -421,8 +418,8 @@ impl RecordBuilder {
 
         Ok(Record {
             data: Cow::Owned(data),
-            data_offset: data_offset,
-            directory: directory,
+            data_offset,
+            directory,
         })
     }
 
@@ -456,6 +453,12 @@ impl RecordBuilder {
     );
 }
 
+impl Default for RecordBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 macro_rules! leader_field(
     ($name:ident {
         $($val:expr => $kind:ident,)+
@@ -476,10 +479,10 @@ macro_rules! leader_field(
             }
         }
 
-        impl Into<u8> for $name {
+        impl From<$name> for u8 {
             #[inline]
-            fn into(self) -> u8 {
-                match self {
+            fn from(x: $name) -> u8 {
+                match x {
                     $($name::$kind => $val),+,
                     $name::Unknown(b) => b,
                 }
@@ -1070,7 +1073,6 @@ mod tests {
 
     mod write {
         use super::{super::*, RECS};
-        use std::error::Error;
 
         #[test]
         fn should_write_record() {
@@ -1079,7 +1081,7 @@ mod tests {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
             match vec.write_record(record.clone()) {
-                Err(why) => panic!("couldn't write file: {}", why.description()),
+                Err(why) => panic!("couldn't write file: {}", why),
                 Ok(_) => (),
             }
 

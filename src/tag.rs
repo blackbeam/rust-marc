@@ -4,8 +4,8 @@ use std::{fmt, str};
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Tag(pub [u8; 3]);
 
-impl Tag {
-    pub fn as_ref(&self) -> &[u8] {
+impl AsRef<[u8]> for Tag {
+    fn as_ref(&self) -> &[u8] {
         &self.0[..]
     }
 }

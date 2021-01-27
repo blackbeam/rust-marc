@@ -9,10 +9,7 @@ pub struct Fields<'a> {
 impl<'a> Fields<'a> {
     #[doc(hidden)]
     pub fn new(record: &'a Record<'a>) -> Fields<'a> {
-        Fields {
-            record: record,
-            offset: 0,
-        }
+        Fields { record, offset: 0 }
     }
 }
 

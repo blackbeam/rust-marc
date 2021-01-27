@@ -14,15 +14,12 @@ pub struct Field<'a> {
 
 impl<'a> Field<'a> {
     #[doc(hidden)]
-    pub fn new<'x>(tag: Tag, data: &'x [u8]) -> Field<'x> {
-        Field {
-            tag: tag,
-            data: data,
-        }
+    pub fn new(tag: Tag, data: &[u8]) -> Field<'_> {
+        Field { tag, data }
     }
 
     /// Will find all subfields with identifier `ident`.
-    pub fn subfield<'r, Ident: Into<Identifier>>(&'r self, ident: Ident) -> Vec<Subfield<'r>> {
+    pub fn subfield<Ident: Into<Identifier>>(&self, ident: Ident) -> Vec<Subfield<'_>> {
         Subfield::find(self, ident)
     }
 

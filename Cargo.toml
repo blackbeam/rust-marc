@@ -31,10 +31,6 @@ debug = true
 opt-level = 3
 debug = true
 
-[profile.doc]
-opt-level = 0
-debug = false
-
 [features]
 default = []
 nightly = []

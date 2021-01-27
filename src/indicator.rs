@@ -2,8 +2,8 @@
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Indicator(pub [u8; 2]);
 
-impl Indicator {
-    pub fn as_ref(&self) -> &[u8] {
+impl AsRef<[u8]> for Indicator {
+    fn as_ref(&self) -> &[u8] {
         &self.0[..]
     }
 }

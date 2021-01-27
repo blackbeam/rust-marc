@@ -2,9 +2,9 @@
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Identifier(pub u8);
 
-impl Into<u8> for Identifier {
-    fn into(self) -> u8 {
-        self.0
+impl From<Identifier> for u8 {
+    fn from(x: Identifier) -> Self {
+        x.0
     }
 }
 

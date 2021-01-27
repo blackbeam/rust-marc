@@ -28,7 +28,7 @@ impl<'a> Subfield<'a> {
                 output.push(sf);
             }
         }
-        return output;
+        output
     }
 
     /// Returns tag of a field this subfield belongs to.
