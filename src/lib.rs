@@ -134,8 +134,7 @@ impl<'a> Record<'a> {
             return Err(Error::RecordTooShort(len));
         }
 
-        data.reserve(len - 5);
-        unsafe { data.set_len(len) };
+        data.resize(len, 0);
         input.read_exact(&mut data[5..len])?;
 
         let data_offset = misc::read_dec_5(&data[12..17])?;
