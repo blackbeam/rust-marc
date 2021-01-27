@@ -18,6 +18,8 @@ mod indicator;
 mod misc;
 mod tag;
 
+pub use errors::*;
+
 #[doc(inline)]
 pub use field::fields::Fields;
 #[doc(inline)]
@@ -38,7 +40,6 @@ pub use indicator::Indicator;
 pub use tag::Tag;
 
 use directory::Directory;
-use errors::*;
 
 const MAX_FIELD_LEN: usize = 9_999;
 const MAX_RECORD_LEN: usize = 99_999;
@@ -58,7 +59,7 @@ macro_rules! get {
 ///
 /// It could be borrowed if it was parsed from a buffer or it could be owned if it was read from an
 /// `io::Read` implementor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Record<'a> {
     data: Cow<'a, [u8]>,
     data_offset: usize,
@@ -584,15 +585,17 @@ leader_field! {
 #[macro_export]
 /// Intended to use with `RecordBuilder::add_fields`.
 ///
-/// ```ignore
+/// ```rust
+/// # use marc::{fields, RecordBuilder};
+/// # let mut builder = RecordBuilder::new();
 /// builder.add_fields(fields!(
-///     control fields: ["001" => "foo"];
+///     control fields: [b"001" => "foo"];
 ///     data fields: [
-///         "856", "41", [
-///             'q' = "bar",
-///             'u' => "baz",
+///         b"856", b"41", [
+///             b'q' => "bar",
+///             b'u' => "baz",
 ///         ],
-///     ]
+///     ];
 /// ));
 /// ```
 macro_rules! fields {
@@ -948,19 +951,19 @@ mod tests {
         fn should_get_field() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
-            let repr = FieldRepr::from(("001", "000000001"));
-            let fields = record.field("001");
+            let repr = FieldRepr::from((b"001", "000000001"));
+            let fields = record.field(b"001");
             assert_eq!(fields, vec![Field::from_repr(&repr)]);
 
-            let repr1 = FieldRepr::from(("979", "  \x1faautoref"));
-            let repr2 = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
-            let fields = record.field("979");
+            let repr1 = FieldRepr::from((b"979", "  \x1faautoref"));
+            let repr2 = FieldRepr::from((b"979", "  \x1fbautoreg\x1fbautoreh"));
+            let fields = record.field(b"979");
             assert_eq!(
                 fields,
                 vec![Field::from_repr(&repr1), Field::from_repr(&repr2),]
             );
 
-            let fields = record.field("999");
+            let fields = record.field(b"999");
             assert_eq!(fields, vec![]);
         }
 
@@ -972,23 +975,23 @@ mod tests {
             assert_eq!(
                 tags,
                 vec![
-                    Tag::from("001"),
-                    Tag::from("003"),
-                    Tag::from("003"),
-                    Tag::from("005"),
-                    Tag::from("008"),
-                    Tag::from("035"),
-                    Tag::from("040"),
-                    Tag::from("041"),
-                    Tag::from("072"),
-                    Tag::from("100"),
-                    Tag::from("245"),
-                    Tag::from("260"),
-                    Tag::from("300"),
-                    Tag::from("650"),
-                    Tag::from("856"),
-                    Tag::from("979"),
-                    Tag::from("979"),
+                    Tag::from(b"001"),
+                    Tag::from(b"003"),
+                    Tag::from(b"003"),
+                    Tag::from(b"005"),
+                    Tag::from(b"008"),
+                    Tag::from(b"035"),
+                    Tag::from(b"040"),
+                    Tag::from(b"041"),
+                    Tag::from(b"072"),
+                    Tag::from(b"100"),
+                    Tag::from(b"245"),
+                    Tag::from(b"260"),
+                    Tag::from(b"300"),
+                    Tag::from(b"650"),
+                    Tag::from(b"856"),
+                    Tag::from(b"979"),
+                    Tag::from(b"979"),
                 ]
             );
         }
@@ -1000,60 +1003,60 @@ mod tests {
             let mut builder = RecordBuilder::new();
             builder.add_fields(fields!(
                 data fields: [
-                    "979", "  ", [
-                        'a' => "autoref",
+                    b"979", b"  ", [
+                        b'a' => "autoref",
                     ],
-                    "979", "  ", [
-                        'b' => "autoreg",
-                        'b' => "autoreh",
+                    b"979", b"  ", [
+                        b'b' => "autoreg",
+                        b'b' => "autoreh",
                     ],
-                    "856", "41" , [
-                        'q' => "application/pdf",
-                        'u' => "http://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf",
+                    b"856", b"41" , [
+                        b'q' => "application/pdf",
+                        b'u' => "http://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf",
                     ],
-                    "650", " 7", [
-                        'a' => "Всеобщая история",
-                        '2' => "nsnr",
+                    b"650", b" 7", [
+                        b'a' => "Всеобщая история",
+                        b'2' => "nsnr",
                     ],
-                    "300", "  ", [
-                        'a' => "24 c.",
-                        'b' => "ил",
+                    b"300", b"  ", [
+                        b'a' => "24 c.",
+                        b'b' => "ил",
                     ],
-                    "260", "  ", [
-                        'a' => "Санкт-Петербург",
-                        'c' => "1992",
+                    b"260", b"  ", [
+                        b'a' => "Санкт-Петербург",
+                        b'c' => "1992",
                     ],
-                    "245", "00", [
-                        'a' => "Этносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :",
-                        'b' => "автореферат дис. ... кандидата исторических наук : 07.00.03",
+                    b"245", b"00", [
+                        b'a' => "Этносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :",
+                        b'b' => "автореферат дис. ... кандидата исторических наук : 07.00.03",
                     ],
-                    "100", "1 ", [
-                        'a' => "'Абд Ал-'Азиз Джа'фар Бин 'Акид",
+                    b"100", b"1 ", [
+                        b'a' => "'Абд Ал-'Азиз Джа'фар Бин 'Акид",
                     ],
-                    "072", " 7", [
-                        'a' => "07.00.03",
-                        '2' => "nsnr",
+                    b"072", b" 7", [
+                        b'a' => "07.00.03",
+                        b'2' => "nsnr",
                     ],
-                    "041", "0 ", [
-                        'a' => "rus",
+                    b"041", b"0 ", [
+                        b'a' => "rus",
                     ],
-                    "040", "  ", [
-                        'a' => "RuMoRGB",
-                        'b' => "rus",
-                        'c' => "RuMoRGB",
+                    b"040", b"  ", [
+                        b'a' => "RuMoRGB",
+                        b'b' => "rus",
+                        b'c' => "RuMoRGB",
                     ],
-                    "035", "  ", [
-                        'a' => "(RuMoEDL)-92k71098",
-                        'f' => "filter",
+                    b"035", b"  ", [
+                        b'a' => "(RuMoEDL)-92k71098",
+                        b'f' => "filter",
                     ],
                 ];
                 control fields: [
-                    "000" => "filter",
-                    "008" => "080528s1992    ru a|||  a    |00 u rus d",
-                    "005" => "20080528120000.0",
-                    "003" => "RuMoRGB",
-                    "003" => "EnMoRGB",
-                    "001" => "000000001",
+                    b"000" => "filter",
+                    b"008" => "080528s1992    ru a|||  a    |00 u rus d",
+                    b"005" => "20080528120000.0",
+                    b"003" => "RuMoRGB",
+                    b"003" => "EnMoRGB",
+                    b"001" => "000000001",
                 ];
             )).unwrap();
             builder
@@ -1065,7 +1068,7 @@ mod tests {
                 .set_encoding_level(record.encoding_level())
                 .set_descriptive_cataloging_form(record.descriptive_cataloging_form())
                 .set_multipart_resource_record_level(record.multipart_resource_record_level());
-            builder.filter_fields(|f| f.get_tag() != "000".into());
+            builder.filter_fields(|f| f.get_tag() != b"000");
             builder.filter_subfields(|_, sf| sf.get_data::<[u8]>() != &b"filter"[..]);
 
             assert_eq!(builder.get_record().unwrap().as_ref(), record.as_ref());

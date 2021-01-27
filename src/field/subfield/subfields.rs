@@ -96,9 +96,9 @@ mod test {
 
     #[test]
     fn should_iterate_subfields() {
-        let field_repr1: FieldRepr = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
-        let field_repr2: FieldRepr = FieldRepr::from(("979", "  "));
-        let field_repr3: FieldRepr = FieldRepr::from(("001", "1"));
+        let field_repr1: FieldRepr = FieldRepr::from((b"979", "  \x1fbautoreg\x1fbautoreh"));
+        let field_repr2: FieldRepr = FieldRepr::from((b"979", "  "));
+        let field_repr3: FieldRepr = FieldRepr::from((b"001", "1"));
 
         let field1 = Field::from_repr(&field_repr1);
         let field2 = Field::from_repr(&field_repr2);

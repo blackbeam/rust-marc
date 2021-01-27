@@ -8,47 +8,123 @@ impl From<Identifier> for u8 {
     }
 }
 
-impl<'a> From<&'a [u8]> for Identifier {
-    #[inline]
-    fn from(s: &'a [u8]) -> Identifier {
-        assert!(s.len() == 1, "Subfield identifier length != 1");
-        Identifier(s[0])
+impl From<u8> for Identifier {
+    fn from(x: u8) -> Identifier {
+        Identifier(x)
     }
 }
 
-impl<'a> From<&'a str> for Identifier {
-    #[inline]
-    fn from(s: &'a str) -> Identifier {
-        s.as_bytes().into()
-    }
-}
-
-impl<'a> From<&'a [u8; 1]> for Identifier {
-    #[inline]
-    fn from(s: &'a [u8; 1]) -> Identifier {
-        Identifier::from(*s)
+impl From<&'_ u8> for Identifier {
+    fn from(x: &'_ u8) -> Identifier {
+        Identifier(*x)
     }
 }
 
 impl From<[u8; 1]> for Identifier {
-    #[inline]
     fn from(s: [u8; 1]) -> Identifier {
-        Identifier(s[0])
+        Identifier::from(s[0])
     }
 }
 
-impl From<char> for Identifier {
-    #[inline]
-    fn from(c: char) -> Identifier {
-        let mut s = String::with_capacity(1);
-        s.push(c);
-        Identifier::from(s.as_bytes())
+impl From<&'_ [u8; 1]> for Identifier {
+    fn from(s: &'_ [u8; 1]) -> Identifier {
+        Identifier::from(*s)
     }
 }
 
-impl From<u8> for Identifier {
-    #[inline]
-    fn from(c: u8) -> Identifier {
-        Identifier(c)
+impl PartialEq<u8> for Identifier {
+    fn eq(&self, other: &u8) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<&'_ u8> for Identifier {
+    fn eq(&self, other: &&'_ u8) -> bool {
+        self.0 == **other
+    }
+}
+
+impl PartialEq<[u8]> for Identifier {
+    fn eq(&self, other: &[u8]) -> bool {
+        &[self.0] == other
+    }
+}
+
+impl PartialEq<&'_ [u8]> for Identifier {
+    fn eq(&self, other: &&'_ [u8]) -> bool {
+        &[self.0] == *other
+    }
+}
+
+impl PartialEq<char> for Identifier {
+    fn eq(&self, other: &char) -> bool {
+        let mut buf = [0; 4];
+        self == other.encode_utf8(&mut buf).as_bytes()
+    }
+}
+
+impl PartialEq<&'_ char> for Identifier {
+    fn eq(&self, other: &&'_ char) -> bool {
+        *self == **other
+    }
+}
+
+impl PartialEq<str> for Identifier {
+    fn eq(&self, other: &str) -> bool {
+        self == other.as_bytes()
+    }
+}
+
+impl PartialEq<&'_ str> for Identifier {
+    fn eq(&self, other: &&'_ str) -> bool {
+        self == other.as_bytes()
+    }
+}
+
+impl PartialEq<Identifier> for u8 {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for &'_ u8 {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for [u8] {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for &'_ [u8] {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for char {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for &'_ char {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for str {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
+    }
+}
+
+impl PartialEq<Identifier> for &'_ str {
+    fn eq(&self, other: &Identifier) -> bool {
+        *other == *self
     }
 }

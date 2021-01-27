@@ -53,8 +53,8 @@ mod test {
 
     #[test]
     fn should_find_subfields() {
-        let field_repr1: FieldRepr = FieldRepr::from(("979", "  \x1faa\x1fbb\x1fbc\x1e"));
-        let field_repr3: FieldRepr = FieldRepr::from(("001", "1\x1e"));
+        let field_repr1: FieldRepr = FieldRepr::from((b"979", "  \x1faa\x1fbb\x1fbc\x1e"));
+        let field_repr3: FieldRepr = FieldRepr::from((b"001", "1\x1e"));
 
         let field1 = Field::from_repr(&field_repr1);
         let field3 = Field::from_repr(&field_repr3);

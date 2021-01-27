@@ -193,7 +193,7 @@ mod test {
 
     #[test]
     fn should_filter_subfields() {
-        let repr: FieldRepr = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
+        let repr: FieldRepr = FieldRepr::from((b"979", "  \x1fbautoreg\x1fbautoreh"));
         let f1 = repr.filter_subfields(|_| false);
         let mut i = 0;
         let f2 = repr.filter_subfields(|_| {
@@ -202,25 +202,25 @@ mod test {
         });
         let f3 = repr.filter_subfields(|_| true);
 
-        assert_eq!(f1, FieldRepr::from(("979", "  ")));
-        assert_eq!(f2, FieldRepr::from(("979", "  \x1fbautoreg")));
-        assert_eq!(f3, FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh")));
+        assert_eq!(f1, FieldRepr::from((b"979", "  ")));
+        assert_eq!(f2, FieldRepr::from((b"979", "  \x1fbautoreg")));
+        assert_eq!(f3, FieldRepr::from((b"979", "  \x1fbautoreg\x1fbautoreh")));
     }
 
     #[test]
     fn should_add_subfield() {
-        let repr: FieldRepr = FieldRepr::from(("979", "  \x1fbautoreg"));
+        let repr: FieldRepr = FieldRepr::from((b"979", "  \x1fbautoreg"));
         let repr2 = repr.add_subfield(b'b', "autoreh").unwrap();
         assert_eq!(
             repr2,
-            FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"))
+            FieldRepr::from((b"979", "  \x1fbautoreg\x1fbautoreh"))
         );
     }
 
     #[test]
     #[should_panic]
     fn should_panic_if_field_is_too_large() {
-        let repr: FieldRepr = FieldRepr::from(("979", "  "));
+        let repr: FieldRepr = FieldRepr::from((b"979", "  "));
         repr.add_subfield(b'a', vec![b'x'; 9995]).unwrap();
     }
 }

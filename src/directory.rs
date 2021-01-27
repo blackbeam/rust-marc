@@ -1,6 +1,6 @@
 use crate::{errors::*, misc, tag::Tag, FIELD_TERMINATOR};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Directory {
     pub entries: Vec<(Tag, usize, usize)>,
 }
@@ -10,7 +10,7 @@ impl Directory {
         let mut entries = Vec::with_capacity(16);
         for chunk in input.chunks(12) {
             if chunk.len() == 12 {
-                let tag = Tag::from(&chunk[0..3]);
+                let tag = Tag::from_slice(&chunk[0..3]);
                 let len = misc::read_dec_4(&chunk[3..7])?;
                 let offset = misc::read_dec_5(&chunk[7..12])?;
                 entries.push((tag, len, offset));
@@ -26,8 +26,9 @@ impl Directory {
 
 #[cfg(test)]
 mod test {
+    use crate::Tag;
+
     use super::Directory;
-    use crate::tag::Tag;
 
     #[test]
     fn should_parse_directory() {
@@ -39,14 +40,14 @@ mod test {
             .to_vec();
         let dir = Directory::parse(&*data).unwrap();
         assert_eq!(
-            dir.entries,
             vec! {
                 (Tag::from(b"001"), 10usize,  0usize),
                 (Tag::from(b"003"),  8, 10),
                 (Tag::from(b"003"),  8, 18),
                 (Tag::from(b"005"), 17, 26),
                 (Tag::from(b"008"), 41, 43),
-            }
+            },
+            dir.entries,
         );
     }
 
