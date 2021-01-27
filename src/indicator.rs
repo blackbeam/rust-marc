@@ -1,5 +1,5 @@
 /// Variable data field indicator.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Indicator(pub [u8; 2]);
 
 impl AsRef<[u8]> for Indicator {

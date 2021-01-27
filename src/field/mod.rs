@@ -85,7 +85,7 @@ impl FieldRepr {
     /// Subfield will be removed if `fun` returns `false` on it.
     pub fn filter_subfields<F>(&self, mut fun: F) -> FieldRepr
     where
-        F: FnMut(&subfield::Subfield) -> bool,
+        F: FnMut(&subfield::Subfield<'_>) -> bool,
     {
         if let Some(&SUBFIELD_DELIMITER) = self.data.get(2) {
             let mut new_data = vec![];
@@ -95,7 +95,7 @@ impl FieldRepr {
             let sfs = f
                 .subfields()
                 .filter(|ref sf| fun(sf))
-                .collect::<Vec<subfield::Subfield>>();
+                .collect::<Vec<subfield::Subfield<'_>>>();
 
             for sf in sfs {
                 new_data.push(SUBFIELD_DELIMITER);
@@ -124,13 +124,13 @@ impl FieldRepr {
 }
 
 impl fmt::Debug for FieldRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
 impl fmt::Display for FieldRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Field({} Data({}))",

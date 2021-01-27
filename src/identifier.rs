@@ -1,5 +1,5 @@
 /// Subfield identifier
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Identifier(pub u8);
 
 impl From<Identifier> for u8 {

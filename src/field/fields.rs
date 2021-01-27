@@ -1,6 +1,7 @@
 use crate::{field::Field, Record};
 
 /// Iterator over fields of a record.
+#[derive(Debug, Clone)]
 pub struct Fields<'a> {
     record: &'a Record<'a>,
     offset: usize,

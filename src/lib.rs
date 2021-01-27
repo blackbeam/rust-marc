@@ -1,3 +1,4 @@
+#![warn(missing_debug_implementations, rust_2018_idioms, future_incompatible)]
 #![cfg_attr(feature = "nightly", feature(test))]
 #![recursion_limit = "1024"]
 
@@ -148,7 +149,7 @@ impl<'a> Record<'a> {
     }
 
     /// Will return fields with tag == `Tag`
-    pub fn field<T: Into<tag::Tag>>(&self, tag: T) -> Vec<Field> {
+    pub fn field<T: Into<tag::Tag>>(&self, tag: T) -> Vec<Field<'_>> {
         let tag = tag.into();
         let mut output = Vec::with_capacity(4);
         for entry in self.directory.entries.iter() {
@@ -186,7 +187,7 @@ impl AsRef<[u8]> for Record<'_> {
 }
 
 impl<'a> fmt::Display for Record<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
             "Leader: {}",
@@ -209,19 +210,20 @@ pub trait WriteRecordExt: io::Write {
     /// write a record to a io::Write implementor
     ///
     /// returns the length of the written record
-    fn write_record(&mut self, record: Record) -> io::Result<()>;
+    fn write_record(&mut self, record: Record<'_>) -> io::Result<()>;
 }
 
 impl<T> WriteRecordExt for T
 where
     T: io::Write,
 {
-    fn write_record(&mut self, record: Record) -> io::Result<()> {
+    fn write_record(&mut self, record: Record<'_>) -> io::Result<()> {
         self.write_all(record.as_ref())
     }
 }
 
 /// Reads records from an `io::Read` implementor.
+#[derive(Debug, Clone)]
 pub struct Records<T>(T, bool);
 
 impl<T: io::Read> Records<T> {
@@ -271,7 +273,7 @@ macro_rules! getset {
 }
 
 /// Record builder.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordBuilder {
     leader: [u8; 24],
     fields: Vec<FieldRepr>,
@@ -287,7 +289,7 @@ impl RecordBuilder {
     }
 
     /// Creates record builder from existing record
-    pub fn from_record(record: &Record) -> RecordBuilder {
+    pub fn from_record(record: &Record<'_>) -> RecordBuilder {
         let mut leader = [0; 24];
         leader.copy_from_slice(&record.as_ref()[0..24]);
         let fields = record.fields().map(FieldRepr::from).collect();
@@ -295,7 +297,7 @@ impl RecordBuilder {
     }
 
     /// Iterator over fields of this builder.
-    pub fn iter_fields(&self) -> slice::Iter<FieldRepr> {
+    pub fn iter_fields(&self) -> slice::Iter<'_, FieldRepr> {
         self.fields.iter()
     }
 
@@ -329,7 +331,7 @@ impl RecordBuilder {
     /// Will filter fields of this builder by `fun` predicate.
     pub fn filter_fields<F>(&mut self, mut fun: F) -> &mut RecordBuilder
     where
-        F: FnMut(&Field) -> bool,
+        F: FnMut(&Field<'_>) -> bool,
     {
         let fields = self
             .fields
@@ -347,7 +349,7 @@ impl RecordBuilder {
     /// Will filter subfields of this builder by `fun` predicate.
     pub fn filter_subfields<F>(&mut self, mut fun: F) -> &mut Self
     where
-        F: FnMut(&Field, &Subfield) -> bool,
+        F: FnMut(&Field<'_>, &Subfield<'_>) -> bool,
     {
         let fields = self
             .fields

@@ -4,7 +4,7 @@ use crate::{
 };
 
 /// Iterator over subfields of a field.
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Subfields<'a> {
     field: Field<'a>,
     state: State,

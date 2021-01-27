@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// View into a subfield of a MARC field
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Subfield<'a> {
     tag: Tag,
     identifier: Identifier,
