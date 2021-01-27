@@ -1,3 +1,98 @@
+//! # Library to work with the MARC 21 Format for Bibliographic Data
+//!
+//! ## Examples
+//!
+//! ### Reading
+//!
+//! ```rust
+//! # use marc::*;
+//! # use std::{io, fs};
+//! # fn main() -> marc::Result<()> {
+//! let input = fs::File::open("test/fixtures/3records.mrc")?;
+//! let mut count = 0;
+//!
+//! for (i, record) in Records::new(input).enumerate() {
+//!     let record = dbg!(record?);
+//!     match i {
+//!         0 => assert_eq!(record.field(b"001")[0].get_data::<str>(), "000000002"),
+//!         1 => assert_eq!(record.field(b"001")[0].get_data::<str>(), "000000005"),
+//!         2 => assert_eq!(record.field(b"001")[0].get_data::<str>(), "000000009"),
+//!         _ => panic!(),
+//!     }
+//!     count += 1;
+//! }
+//!
+//! assert_eq!(count, 3);
+//! # marc::Result::Ok(())
+//! # }
+//! ```
+//!
+//! ### Creating
+//!
+//! ```rust
+//! # use marc::*;
+//! # use std::{io, fs};
+//! # fn main() -> marc::Result<()> {
+//! let mut builder = RecordBuilder::new();
+//! let record = builder
+//!     .add_fields(fields!(
+//!         control fields: [
+//!             b"001" => "000000002",
+//!             b"003" => "RuMoRGB",
+//!         ];
+//!         data fields: [
+//!             b"979", b"  ", [
+//!                 b'a' => "autoref",
+//!                 b'a' => "dlopen",
+//!             ],
+//!         ];
+//!     ))?
+//!     .get_record()?;
+//! assert_eq!(record.as_ref(), b"00100nam  2200061 i 4500001001000000003000800010\
+//!     979002000018\x1E000000002\x1ERuMoRGB\x1E  \x1Faautoref\x1Fadlopen\x1E\x1D");
+//! # marc::Result::Ok(())
+//! # }
+//! ```
+//!
+//! ### Updating
+//!
+//! ```rust
+//! # use marc::*;
+//! # use std::{io, fs};
+//! # fn main() -> marc::Result<()> {
+//! let input = fs::File::open("test/fixtures/3records.mrc")?;
+//! let orig_record = Records::new(input).next().expect("should be here")?;
+//! let mut builder = RecordBuilder::from_record(&orig_record);
+//! let record = builder
+//!     // we'll replace `001`
+//!     .filter_fields(|f| f.get_tag() != "001")
+//!     .add_field((b"001", "foo"))?
+//!     // we'll remove `979a` with value `dlopen` (note that an empty `979` will remain)
+//!     .filter_subfields(|_, sf| sf.get_tag() != "979" ||
+//!         sf.get_identifier() != 'a' ||
+//!         sf.get_data::<str>() != "dlopen")
+//!     .get_record()?;
+//!
+//! assert_eq!(record.as_ref(), "01339nam a2200301 i 45000010004000000030008000040050017000120080\
+//!     041000290170023000700350025000930400026001180410008001440720019001520840027001710840029001\
+//!     980840029002271000076002562450352003322600025006843000011007096500092007207870038008128520\
+//!     03400850852003400884856010400918979001201022979000301034\x1efoo\x1eRuMoRGB\x1e201507161647\
+//!     15.0\x1e911009s1990    ru ||||  a    |00 u rus d\x1e  \x1fa91-8563А\x1fbRuMoRKP\x1e  \x1fa\
+//!     (RuMoRGB)DIS-0000114\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.0\
+//!     3\x1f2nsnr\x1e  \x1faЭ38-36-021.4,0\x1f2rubbk\x1e  \x1faТ3(6Ег)63-4,02\x1f2rubbk\x1e  \x1f\
+//!     aТ3(5Ср)63-4,02\x1f2rubbk\x1e1 \x1faАбдувахитов, Абдужабар Абдусаттарович\x1e00\x1fa\"Брат\
+//!     ья-мусульмане\" на общественно-политической арене Египта и Сирии в 1928-1963 гг. :\x1fbавт\
+//!     ореферат дис. ... кандидата исторических наук : 07.00.03\x1fcАбдувахитов Абдужабар Абдусат\
+//!     тарович ; Ташк. гос. ун-т\x1e  \x1faТашкент\x1fc1990\x1e  \x1fa17 с.\x1e 7\x1faВсеобщая ис\
+//!     тория (соответствующего периода)\x1f2nsnr\x1e18\x1fw008120708\x1fiДиссертация\x1e4 \x1faРГ\
+//!     Б\x1fbFB\x1fj9 91-4/2388-x\x1fx71\x1e4 \x1faРГБ\x1fbFB\x1fj9 91-4/2389-8\x1fx70\x1e41\x1fq\
+//!     application/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl010\
+//!     00000002.pdf\x1e  \x1faautoref\x1e  \x1e\x1d".as_bytes());
+//!
+//! # marc::Result::Ok(())
+//! # }
+//! ```
+
 #![warn(missing_debug_implementations, rust_2018_idioms, future_incompatible)]
 #![cfg_attr(feature = "nightly", feature(test))]
 #![recursion_limit = "1024"]
