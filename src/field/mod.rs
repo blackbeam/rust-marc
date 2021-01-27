@@ -1,17 +1,10 @@
 pub mod fields;
 pub mod subfield;
 
-use std::fmt;
-use std::str;
+use std::{fmt, str};
 
-use crate::MAX_FIELD_LEN;
-use crate::SUBFIELD_DELIMITER;
-use crate::errors::*;
-use crate::Identifier;
-use crate::Indicator;
-use crate::Tag;
-use self::subfield::Subfield;
-use self::subfield::subfields::Subfields;
+use self::subfield::{subfields::Subfields, Subfield};
+use crate::{errors::*, Identifier, Indicator, Tag, MAX_FIELD_LEN, SUBFIELD_DELIMITER};
 /// View into a field of a MARC record
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Field<'a> {
@@ -73,8 +66,9 @@ impl FieldRepr {
     /// Will return Error if resuling field length (with field terminator) is greater than
     /// 9.999 bytes.
     pub fn add_subfield<Ident, D>(&self, identifier: Ident, f_data: D) -> Result<FieldRepr>
-    where Ident: Into<Identifier>,
-          D: AsRef<[u8]>,
+    where
+        Ident: Into<Identifier>,
+        D: AsRef<[u8]>,
     {
         let mut new_data = self.data.clone();
         new_data.push(SUBFIELD_DELIMITER);
@@ -93,14 +87,16 @@ impl FieldRepr {
     ///
     /// Subfield will be removed if `fun` returns `false` on it.
     pub fn filter_subfields<F>(&self, mut fun: F) -> FieldRepr
-    where F: FnMut(&subfield::Subfield) -> bool
+    where
+        F: FnMut(&subfield::Subfield) -> bool,
     {
         if let Some(&SUBFIELD_DELIMITER) = self.data.get(2) {
             let mut new_data = vec![];
             new_data.extend_from_slice(&self.data[0..2]);
 
             let f = Field::from_repr(&self);
-            let sfs = f.subfields()
+            let sfs = f
+                .subfields()
                 .filter(|ref sf| fun(sf))
                 .collect::<Vec<subfield::Subfield>>();
 
@@ -138,15 +134,21 @@ impl fmt::Debug for FieldRepr {
 
 impl fmt::Display for FieldRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Field({} Data({}))", self.tag, str::from_utf8(&*self.data).unwrap())
+        write!(
+            f,
+            "Field({} Data({}))",
+            self.tag,
+            str::from_utf8(&*self.data).unwrap()
+        )
     }
 }
 
 impl<T, Ind, Ident, D> From<(T, Ind, Vec<(Ident, D)>)> for FieldRepr
-where T: Into<Tag>,
-      Ind: Into<Indicator>,
-      Ident: Into<Identifier>,
-      D: Into<Vec<u8>>,
+where
+    T: Into<Tag>,
+    Ind: Into<Indicator>,
+    Ident: Into<Identifier>,
+    D: Into<Vec<u8>>,
 {
     fn from((tag, indicator, subfields): (T, Ind, Vec<(Ident, D)>)) -> FieldRepr {
         let mut repr = FieldRepr::from((tag, indicator.into().as_ref()));
@@ -195,17 +197,13 @@ mod test {
     #[test]
     fn should_filter_subfields() {
         let repr: FieldRepr = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
-        let f1 = repr.filter_subfields(|_| {
-            false
-        });
+        let f1 = repr.filter_subfields(|_| false);
         let mut i = 0;
         let f2 = repr.filter_subfields(|_| {
             i += 1;
             i == 1
         });
-        let f3 = repr.filter_subfields(|_| {
-            true
-        });
+        let f3 = repr.filter_subfields(|_| true);
 
         assert_eq!(f1, FieldRepr::from(("979", "  ")));
         assert_eq!(f2, FieldRepr::from(("979", "  \x1fbautoreg")));
@@ -216,7 +214,10 @@ mod test {
     fn should_add_subfield() {
         let repr: FieldRepr = FieldRepr::from(("979", "  \x1fbautoreg"));
         let repr2 = repr.add_subfield(b'b', "autoreh").unwrap();
-        assert_eq!(repr2, FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh")));
+        assert_eq!(
+            repr2,
+            FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"))
+        );
     }
 
     #[test]

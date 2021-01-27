@@ -2,11 +2,10 @@ use crate::Identifier;
 
 pub mod subfields;
 
-use crate::field::{
-    Field,
-    FromFieldData,
+use crate::{
+    field::{Field, FromFieldData},
+    tag::Tag,
 };
-use crate::tag::Tag;
 
 /// View into a subfield of a MARC field
 #[derive(Eq, PartialEq, Clone)]
@@ -19,7 +18,8 @@ pub struct Subfield<'a> {
 impl<'a> Subfield<'a> {
     #[doc(hidden)]
     pub fn find<'f, 'r, Ident>(f: &'r Field<'f>, identifier: Ident) -> Vec<Subfield<'r>>
-    where Ident: Into<Identifier>
+    where
+        Ident: Into<Identifier>,
     {
         let mut output = Vec::with_capacity(4);
         let identifier = identifier.into();

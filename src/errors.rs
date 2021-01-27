@@ -1,5 +1,4 @@
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 use crate::tag::Tag;
 
@@ -23,11 +22,21 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::UnexpectedByteInDecNum(byte) => write!(f, "Unexpected byte in decimal string: {}", byte),
-            Error::FieldTooLarge(tag) => write!(f, "Field byte length is greater than 9998 (tag={})", tag),
-            Error::RecordTooLarge(size) => write!(f, "Record byte length {} is greater than 99999 limit", size),
-            Error::RecordTooShort(len) => write!(f, "Record length {} specified in leader is too small", len),
-            Error::UnexpectedEofInDecNum => write!(f, "Unexpected EOF while reading decimal number"),
+            Error::UnexpectedByteInDecNum(byte) => {
+                write!(f, "Unexpected byte in decimal string: {}", byte)
+            }
+            Error::FieldTooLarge(tag) => {
+                write!(f, "Field byte length is greater than 9998 (tag={})", tag)
+            }
+            Error::RecordTooLarge(size) => {
+                write!(f, "Record byte length {} is greater than 99999 limit", size)
+            }
+            Error::RecordTooShort(len) => {
+                write!(f, "Record length {} specified in leader is too small", len)
+            }
+            Error::UnexpectedEofInDecNum => {
+                write!(f, "Unexpected EOF while reading decimal number")
+            }
             Error::UnexpectedEof => write!(f, "Unexpected EOF"),
             Error::UnexpectedEofInDirectory => write!(f, "Unexpected EOF while reading directory"),
             Error::NoRecordTerminator => write!(f, "No record terminator"),

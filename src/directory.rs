@@ -1,7 +1,4 @@
-use crate::FIELD_TERMINATOR;
-use crate::errors::*;
-use crate::misc;
-use crate::tag::Tag;
+use crate::{errors::*, misc, tag::Tag, FIELD_TERMINATOR};
 
 #[derive(Debug, Clone)]
 pub struct Directory {
@@ -23,16 +20,14 @@ impl Directory {
                 return Err(Error::UnexpectedEofInDirectory);
             }
         }
-        Ok(Directory {
-            entries: entries,
-        })
+        Ok(Directory { entries: entries })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::tag::Tag;
     use super::Directory;
+    use crate::tag::Tag;
 
     #[test]
     fn should_parse_directory() {
@@ -40,15 +35,19 @@ mod test {
                      003000800010\
                      003000800018\
                      005001700026\
-                     008004100043\x1e".to_vec();
+                     008004100043\x1e"
+            .to_vec();
         let dir = Directory::parse(&*data).unwrap();
-        assert_eq!(dir.entries, vec!{
-            (Tag::from(b"001"), 10usize,  0usize),
-            (Tag::from(b"003"),  8, 10),
-            (Tag::from(b"003"),  8, 18),
-            (Tag::from(b"005"), 17, 26),
-            (Tag::from(b"008"), 41, 43),
-        });
+        assert_eq!(
+            dir.entries,
+            vec! {
+                (Tag::from(b"001"), 10usize,  0usize),
+                (Tag::from(b"003"),  8, 10),
+                (Tag::from(b"003"),  8, 18),
+                (Tag::from(b"005"), 17, 26),
+                (Tag::from(b"008"), 41, 43),
+            }
+        );
     }
 
     #[test]

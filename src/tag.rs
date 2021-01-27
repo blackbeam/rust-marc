@@ -1,5 +1,4 @@
-use std::fmt;
-use std::str;
+use std::{fmt, str};
 
 /// Tag of a field
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]

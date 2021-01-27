@@ -1,5 +1,4 @@
-use crate::field::Field;
-use crate::Record;
+use crate::{field::Field, Record};
 
 /// Iterator over fields of a record.
 pub struct Fields<'a> {

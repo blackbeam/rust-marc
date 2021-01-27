@@ -1,5 +1,0 @@
-where_trailing_comma = true
-match_block_trailing_comma = true
-use_try_shorthand = true
-fn_brace_style = "PreferSameLine"
-max_width = 100

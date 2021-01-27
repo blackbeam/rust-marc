@@ -1,6 +1,7 @@
-use crate::field::Field;
-use crate::field::subfield::Subfield;
-use crate::SUBFIELD_DELIMITER;
+use crate::{
+    field::{subfield::Subfield, Field},
+    SUBFIELD_DELIMITER,
+};
 
 /// Iterator over subfields of a field.
 #[derive(Eq, PartialEq, Clone)]
@@ -27,17 +28,15 @@ impl<'a> Iterator for Subfields<'a> {
                 // Jump over indicator
                 self.state = State::Start(2);
                 self.next()
-            },
-            State::Start(offset) => {
-                match self.field.data.get(offset).map(|x| *x) {
-                    Some(SUBFIELD_DELIMITER) => {
-                        self.state = State::SubfieldStart(offset + 1);
-                        self.next()
-                    },
-                    _ => {
-                        self.state = State::Done;
-                        self.next()
-                    },
+            }
+            State::Start(offset) => match self.field.data.get(offset).map(|x| *x) {
+                Some(SUBFIELD_DELIMITER) => {
+                    self.state = State::SubfieldStart(offset + 1);
+                    self.next()
+                }
+                _ => {
+                    self.state = State::Done;
+                    self.next()
                 }
             },
             State::SubfieldStart(offset) => {
@@ -46,13 +45,13 @@ impl<'a> Iterator for Subfields<'a> {
                         // Subfield ends unexpectedly
                         self.state = State::Done;
                         None
-                    },
+                    }
                     Some(byte) => {
                         self.state = State::Subfield(byte, offset + 1, 0);
                         self.next()
-                    },
+                    }
                 }
-            },
+            }
             State::Subfield(identifier, start, offset) => {
                 match self.field.data.get(start + offset).map(|x| *x) {
                     Some(SUBFIELD_DELIMITER) => {
@@ -62,7 +61,7 @@ impl<'a> Iterator for Subfields<'a> {
                             identifier: identifier.into(),
                             data: &self.field.data[start..start + offset],
                         })
-                    },
+                    }
                     None => {
                         self.state = State::Done;
                         Some(Subfield {
@@ -70,13 +69,13 @@ impl<'a> Iterator for Subfields<'a> {
                             identifier: identifier.into(),
                             data: &self.field.data[start..start + offset],
                         })
-                    },
+                    }
                     Some(_) => {
                         self.state = State::Subfield(identifier, start, offset + 1);
                         self.next()
                     }
                 }
-            },
+            }
             State::Done => None,
         }
     }

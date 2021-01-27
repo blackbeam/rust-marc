@@ -10,7 +10,7 @@ pub fn read_dec_1(i: u8) -> Result<u8> {
 
 pub fn read_dec_4(i: &[u8]) -> Result<usize> {
     if i.len() < 4 {
-        return Err(Error::UnexpectedEofInDecNum)
+        return Err(Error::UnexpectedEofInDecNum);
     }
     let mut result = 0usize;
     for x in 0..4usize {
@@ -21,7 +21,7 @@ pub fn read_dec_4(i: &[u8]) -> Result<usize> {
 
 pub fn read_dec_5(i: &[u8]) -> Result<usize> {
     if i.len() < 5 {
-        return Err(Error::UnexpectedEofInDecNum)
+        return Err(Error::UnexpectedEofInDecNum);
     }
     let mut result = 0usize;
     for x in 0..5usize {

@@ -4,19 +4,25 @@
 #[cfg(feature = "nightly")]
 extern crate test;
 
-use std::borrow::{Borrow, Cow};
-use std::fmt;
-use std::io;
-use std::slice;
+use std::{
+    borrow::{Borrow, Cow},
+    fmt, io, slice,
+};
 
 mod directory;
 pub mod errors;
 mod field;
+mod identifier;
+mod indicator;
 mod misc;
 mod tag;
-mod indicator;
-mod identifier;
 
+#[doc(inline)]
+pub use field::fields::Fields;
+#[doc(inline)]
+pub use field::subfield::subfields::Subfields;
+#[doc(inline)]
+pub use field::subfield::Subfield;
 #[doc(inline)]
 pub use field::Field;
 #[doc(inline)]
@@ -24,17 +30,11 @@ pub use field::FieldRepr;
 #[doc(inline)]
 pub use field::FromFieldData;
 #[doc(inline)]
-pub use field::fields::Fields;
-#[doc(inline)]
-pub use field::subfield::Subfield;
-#[doc(inline)]
-pub use field::subfield::subfields::Subfields;
-#[doc(inline)]
-pub use tag::Tag;
+pub use identifier::Identifier;
 #[doc(inline)]
 pub use indicator::Indicator;
 #[doc(inline)]
-pub use identifier::Identifier;
+pub use tag::Tag;
 
 use directory::Directory;
 use errors::*;
@@ -46,11 +46,11 @@ const FIELD_TERMINATOR: u8 = 0x1E;
 const SUBFIELD_DELIMITER: u8 = 0x1F;
 
 macro_rules! get {
-    ($name:ident, $sname:ident, $num:expr) => (
+    ($name:ident, $sname:ident, $num:expr) => {
         pub fn $sname(&self) -> $name {
             self.data[$num].into()
         }
-    );
+    };
 }
 
 /// Parsed MARC Record.
@@ -94,12 +94,17 @@ impl<'a> Record<'a> {
     /// # Panic
     /// Will check that input length equals the record length.
     pub fn from_vec<I>(input: I) -> Result<Record<'static>>
-    where I: Into<Vec<u8>>,
+    where
+        I: Into<Vec<u8>>,
     {
         let input = input.into();
 
         let (data_offset, directory) = {
-            let Record {data_offset, directory, data} = Record::parse(&*input)?;
+            let Record {
+                data_offset,
+                directory,
+                data,
+            } = Record::parse(&*input)?;
             assert_eq!(input.len(), data.as_ref().len());
             (data_offset, directory)
         };
@@ -174,14 +179,27 @@ impl<'a> Record<'a> {
     get!(CharacterCodingScheme, character_coding_scheme, 9);
     get!(EncodingLevel, encoding_level, 17);
     get!(DescriptiveCatalogingForm, descriptive_cataloging_form, 18);
-    get!(MultipartResourceRecordLevel, multipart_resource_record_level, 19);
+    get!(
+        MultipartResourceRecordLevel,
+        multipart_resource_record_level,
+        19
+    );
 }
 
 impl<'a> fmt::Display for Record<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Leader: {}", String::from_utf8_lossy(&self.as_ref()[0..24]))?;
+        writeln!(
+            f,
+            "Leader: {}",
+            String::from_utf8_lossy(&self.as_ref()[0..24])
+        )?;
         for field in self.fields() {
-            writeln!(f, "Field: {} Data({})", field.get_tag(), field.get_data::<str>())?;
+            writeln!(
+                f,
+                "Field: {} Data({})",
+                field.get_tag(),
+                field.get_data::<str>()
+            )?;
         }
         Ok(())
     }
@@ -195,13 +213,14 @@ pub trait WriteRecordExt: io::Write {
     fn write_record(&mut self, record: Record) -> io::Result<()>;
 }
 
-impl<T> WriteRecordExt for T where T: io::Write {
-
-    fn write_record(&mut self, record: Record) -> io::Result<()>{
+impl<T> WriteRecordExt for T
+where
+    T: io::Write,
+{
+    fn write_record(&mut self, record: Record) -> io::Result<()> {
         self.write_all(record.as_ref())
     }
 }
-
 
 /// Reads records from an `io::Read` implementor.
 pub struct Records<T>(T, bool);
@@ -226,13 +245,11 @@ impl<T: io::Read> Iterator for Records<T> {
         } else {
             let result = Record::read(&mut self.0);
             match result {
-                Ok(Some(record)) => {
-                    Some(Ok(record))
-                },
+                Ok(Some(record)) => Some(Ok(record)),
                 Ok(None) => {
                     self.1 = true;
                     None
-                },
+                }
                 Err(err) => {
                     self.1 = true;
                     Some(Err(err))
@@ -243,15 +260,15 @@ impl<T: io::Read> Iterator for Records<T> {
 }
 
 macro_rules! getset {
-    ($name:ident, $geti:ident, $seti:ident, $num:expr) => (
-    pub fn $geti(&self) -> $name {
-        self.leader[$num].into()
-    }
-    pub fn $seti(&mut self, x: $name) -> &mut Self {
-        self.leader[$num] = x.into();
-        self
-    }
-    );
+    ($name:ident, $geti:ident, $seti:ident, $num:expr) => {
+        pub fn $geti(&self) -> $name {
+            self.leader[$num].into()
+        }
+        pub fn $seti(&mut self, x: $name) -> &mut Self {
+            self.leader[$num] = x.into();
+            self
+        }
+    };
 }
 
 /// Record builder.
@@ -315,9 +332,13 @@ impl RecordBuilder {
 
     /// Will filter fields of this builder by `fun` predicate.
     pub fn filter_fields<F>(&mut self, mut fun: F) -> &mut RecordBuilder
-    where F: FnMut(&Field) -> bool
+    where
+        F: FnMut(&Field) -> bool,
     {
-        let fields = self.fields.clone().into_iter()
+        let fields = self
+            .fields
+            .clone()
+            .into_iter()
             .filter(|ref f| {
                 let f = Field::from_repr(f);
                 fun(&f)
@@ -329,13 +350,18 @@ impl RecordBuilder {
 
     /// Will filter subfields of this builder by `fun` predicate.
     pub fn filter_subfields<F>(&mut self, mut fun: F) -> &mut Self
-        where F: FnMut(&Field, &Subfield) -> bool
+    where
+        F: FnMut(&Field, &Subfield) -> bool,
     {
-        let fields = self.fields.clone().into_iter()
+        let fields = self
+            .fields
+            .clone()
+            .into_iter()
             .map(|f| {
                 let fld = Field::from_repr(&f);
                 f.filter_subfields(|sf| fun(&fld, &sf))
-            }).collect();
+            })
+            .collect();
         self.fields = fields;
         self
     }
@@ -385,7 +411,11 @@ impl RecordBuilder {
         data.push(RECORD_TERMINATOR);
 
         let (data_offset, directory) = match Record::parse(&*data) {
-            Ok(Record {data: _, data_offset, directory}) => (data_offset, directory),
+            Ok(Record {
+                data: _,
+                data_offset,
+                directory,
+            }) => (data_offset, directory),
             Err(err) => return Err(err),
         };
 
@@ -398,12 +428,32 @@ impl RecordBuilder {
 
     getset!(RecordStatus, get_record_status, set_record_status, 5);
     getset!(TypeOfRecord, get_type_of_record, set_type_of_record, 6);
-    getset!(BibliographicLevel, get_bibliographic_level, set_bibliographic_level, 7);
+    getset!(
+        BibliographicLevel,
+        get_bibliographic_level,
+        set_bibliographic_level,
+        7
+    );
     getset!(TypeOfControl, get_type_of_control, set_type_of_control, 8);
-    getset!(CharacterCodingScheme, get_character_coding_scheme, set_character_coding_scheme, 9);
+    getset!(
+        CharacterCodingScheme,
+        get_character_coding_scheme,
+        set_character_coding_scheme,
+        9
+    );
     getset!(EncodingLevel, get_encoding_level, set_encoding_level, 17);
-    getset!(DescriptiveCatalogingForm, get_descriptive_cataloging_form, set_descriptive_cataloging_form, 18);
-    getset!(MultipartResourceRecordLevel, get_multipart_resource_record_level, set_multipart_resource_record_level, 19);
+    getset!(
+        DescriptiveCatalogingForm,
+        get_descriptive_cataloging_form,
+        set_descriptive_cataloging_form,
+        18
+    );
+    getset!(
+        MultipartResourceRecordLevel,
+        get_multipart_resource_record_level,
+        set_multipart_resource_record_level,
+        19
+    );
 }
 
 macro_rules! leader_field(
@@ -719,22 +769,32 @@ mod tests {
                                 \x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
     const REC_SIZE: u64 = 963;
     mod read {
+        use super::{super::*, RECS, REC_SIZE};
         use std::io;
-        use super::RECS;
-        use super::REC_SIZE;
-        use super::super::*;
 
         #[test]
         fn shoud_parse_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
         }
 
@@ -743,12 +803,24 @@ mod tests {
             let record = Record::from_vec((&RECS.as_bytes()[..963]).to_vec()).unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
         }
 
@@ -761,23 +833,47 @@ mod tests {
             let record = record.unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
             let record = Record::read(&mut input).unwrap();
             let record = record.unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[REC_SIZE as usize..]);
             let record = Record::read(&mut input).unwrap();
             assert!(record.is_none());
@@ -793,22 +889,46 @@ mod tests {
             let record = records.next().unwrap().unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[0..REC_SIZE as usize]);
             let record = records.next().unwrap().unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
-            assert_eq!(record.bibliographic_level(), BibliographicLevel::MonographOrItem);
+            assert_eq!(
+                record.bibliographic_level(),
+                BibliographicLevel::MonographOrItem
+            );
             assert_eq!(record.type_of_control(), TypeOfControl::NoSpecifiedType);
-            assert_eq!(record.character_coding_scheme(), CharacterCodingScheme::UcsUnicode);
+            assert_eq!(
+                record.character_coding_scheme(),
+                CharacterCodingScheme::UcsUnicode
+            );
             assert_eq!(record.encoding_level(), EncodingLevel::FullLevel);
-            assert_eq!(record.descriptive_cataloging_form(), DescriptiveCatalogingForm::IsbdPunctuationIncluded);
-            assert_eq!(record.multipart_resource_record_level(), MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable);
+            assert_eq!(
+                record.descriptive_cataloging_form(),
+                DescriptiveCatalogingForm::IsbdPunctuationIncluded
+            );
+            assert_eq!(
+                record.multipart_resource_record_level(),
+                MultipartResourceRecordLevel::NotSpecifiedOrNotApplicable
+            );
             assert_eq!(record.as_ref(), &RECS.as_bytes()[REC_SIZE as usize..]);
             assert!(records.next().is_none());
             assert!(records.next().is_none());
@@ -818,7 +938,6 @@ mod tests {
             let mut records = Records::new(input);
             assert!(records.next().unwrap().is_err());
             assert!(records.next().is_none());
-
         }
 
         #[test]
@@ -832,10 +951,10 @@ mod tests {
             let repr1 = FieldRepr::from(("979", "  \x1faautoref"));
             let repr2 = FieldRepr::from(("979", "  \x1fbautoreg\x1fbautoreh"));
             let fields = record.field("979");
-            assert_eq!(fields, vec![
-                Field::from_repr(&repr1),
-                Field::from_repr(&repr2),
-            ]);
+            assert_eq!(
+                fields,
+                vec![Field::from_repr(&repr1), Field::from_repr(&repr2),]
+            );
 
             let fields = record.field("999");
             assert_eq!(fields, vec![]);
@@ -846,25 +965,28 @@ mod tests {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
             let tags: Vec<Tag> = record.fields().map(|field| field.get_tag()).collect();
-            assert_eq!(tags, vec![
-                Tag::from("001"),
-                Tag::from("003"),
-                Tag::from("003"),
-                Tag::from("005"),
-                Tag::from("008"),
-                Tag::from("035"),
-                Tag::from("040"),
-                Tag::from("041"),
-                Tag::from("072"),
-                Tag::from("100"),
-                Tag::from("245"),
-                Tag::from("260"),
-                Tag::from("300"),
-                Tag::from("650"),
-                Tag::from("856"),
-                Tag::from("979"),
-                Tag::from("979"),
-            ]);
+            assert_eq!(
+                tags,
+                vec![
+                    Tag::from("001"),
+                    Tag::from("003"),
+                    Tag::from("003"),
+                    Tag::from("005"),
+                    Tag::from("008"),
+                    Tag::from("035"),
+                    Tag::from("040"),
+                    Tag::from("041"),
+                    Tag::from("072"),
+                    Tag::from("100"),
+                    Tag::from("245"),
+                    Tag::from("260"),
+                    Tag::from("300"),
+                    Tag::from("650"),
+                    Tag::from("856"),
+                    Tag::from("979"),
+                    Tag::from("979"),
+                ]
+            );
         }
 
         #[test]
@@ -930,14 +1052,15 @@ mod tests {
                     "001" => "000000001",
                 ];
             )).unwrap();
-            builder.set_record_status(record.record_status())
-                   .set_type_of_record(record.type_of_record())
-                   .set_bibliographic_level(record.bibliographic_level())
-                   .set_type_of_control(record.type_of_control())
-                   .set_character_coding_scheme(record.character_coding_scheme())
-                   .set_encoding_level(record.encoding_level())
-                   .set_descriptive_cataloging_form(record.descriptive_cataloging_form())
-                   .set_multipart_resource_record_level(record.multipart_resource_record_level());
+            builder
+                .set_record_status(record.record_status())
+                .set_type_of_record(record.type_of_record())
+                .set_bibliographic_level(record.bibliographic_level())
+                .set_type_of_control(record.type_of_control())
+                .set_character_coding_scheme(record.character_coding_scheme())
+                .set_encoding_level(record.encoding_level())
+                .set_descriptive_cataloging_form(record.descriptive_cataloging_form())
+                .set_multipart_resource_record_level(record.multipart_resource_record_level());
             builder.filter_fields(|f| f.get_tag() != "000".into());
             builder.filter_subfields(|_, sf| sf.get_data::<[u8]>() != &b"filter"[..]);
 
@@ -946,9 +1069,8 @@ mod tests {
     }
 
     mod write {
+        use super::{super::*, RECS};
         use std::error::Error;
-        use super::RECS;
-        use super::super::*;
 
         #[test]
         fn should_write_record() {
@@ -968,10 +1090,8 @@ mod tests {
 
     #[cfg(feature = "nightly")]
     mod bench {
+        use super::{super::*, RECS, REC_SIZE};
         use test;
-        use super::RECS;
-        use super::REC_SIZE;
-        use super::super::*;
 
         #[bench]
         fn read_record(b: &mut test::Bencher) {
