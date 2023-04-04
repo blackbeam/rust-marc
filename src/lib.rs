@@ -284,18 +284,10 @@ impl AsRef<[u8]> for Record<'_> {
 
 impl<'a> fmt::Display for Record<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Leader: {}",
-            String::from_utf8_lossy(&self.as_ref()[0..24])
-        )?;
+        let leader = &self.as_ref()[0..24];
+        writeln!(f, "=LDR  {}", String::from_utf8_lossy(leader))?;
         for field in self.fields() {
-            writeln!(
-                f,
-                "Field: {} Data({})",
-                field.get_tag(),
-                field.get_data::<str>()
-            )?;
+            writeln!(f, "{}", field)?;
         }
         Ok(())
     }
@@ -863,17 +855,17 @@ macro_rules! fields {
 
 #[cfg(test)]
 mod tests {
-    const RECS: &'static str = "00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
-                                \x1e000000001\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d\
-                                00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
-                                \x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
+    const RECS: &str = "00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
+                        \x1e000000001\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000001/rsl01000000001.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d\
+                        00963nam a2200229 i 4500001001000000003000800010003000800018005001700026008004100043035002300084040002600107041000800133072001900141100005800160245028000218260004000498300001600538650004200554856010400596979001200700979002100712\
+                        \x1e000000002\x1eRuMoRGB\x1eEnMoRGB\x1e20080528120000.0\x1e080528s1992    ru a|||  a    |00 u rus d\x1e  \x1fa(RuMoEDL)-92k71098\x1e  \x1faRuMoRGB\x1fbrus\x1fcRuMoRGB\x1e0 \x1farus\x1e 7\x1fa07.00.03\x1f2nsnr\x1e1 \x1fa'Абд Ал-'Азиз Джа'фар Бин 'Акид\x1e00\x1faЭтносоциальная структура и институты социальной защиты в Хадрамауте (19 - первая половина 20 вв.) :\x1fbавтореферат дис. ... кандидата исторических наук : 07.00.03\x1e  \x1faСанкт-Петербург\x1fc1992\x1e  \x1fa24 c.\x1fbил\x1e 7\x1faВсеобщая история\x1f2nsnr\x1e41\x1fqapplication/pdf\x1fuhttp://dlib.rsl.ru/rsl01000000000/rsl01000000000/rsl01000000002/rsl01000000002.pdf\x1e  \x1faautoref\x1e  \x1fbautoreg\x1fbautoreh\x1e\x1d";
     const REC_SIZE: u64 = 963;
     mod read {
         use super::{super::*, RECS, REC_SIZE};
         use std::io;
 
         #[test]
-        fn shoud_parse_record() {
+        fn should_parse_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
@@ -1090,7 +1082,7 @@ mod tests {
         }
 
         #[test]
-        fn sholud_build_record() {
+        fn should_build_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
             let mut builder = RecordBuilder::new();
@@ -1165,6 +1157,36 @@ mod tests {
             builder.filter_subfields(|_, sf| sf.get_data::<[u8]>() != &b"filter"[..]);
 
             assert_eq!(builder.get_record().unwrap().as_ref(), record.as_ref());
+        }
+
+        #[test]
+        fn should_display_record() {
+            let mut builder = RecordBuilder::new();
+            builder
+                .add_fields(fields!(
+                    data fields: [
+                        b"245", b"00", [
+                            b'a' => "Book title",
+                            b'b' => "Book Subtitle",
+                        ],
+                        b"100", b"1 ", [
+                            b'a' => "Author Name",
+                        ],
+                        b"041", b"0 ", [
+                            b'a' => "eng",
+                        ],
+                    ];
+                    control fields: [
+                        b"008" => "210128t20212021enka    sb    000 0 eng d",
+                        b"001" => "000000001",
+                    ];
+                ))
+                .unwrap();
+            let record = builder.get_record().unwrap();
+
+            let expected = "=LDR  00191nam  2200085 i 4500\n=001  000000001\n=008  210128t20212021enka\\\\\\\\sb\\\\\\\\000\\0\\eng\\d\n=041  0 $aeng\n=100  1 $aAuthor Name\n=245  00$aBook title$bBook Subtitle\n".to_string();
+
+            assert_eq!(format!("{}", record), expected);
         }
     }
 
