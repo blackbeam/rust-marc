@@ -59,10 +59,15 @@ impl fmt::Display for Field<'_> {
             }
             _ => {
                 // variable data field
-                self
-                    .get_data::<[u8]>()
+                self.get_data::<[u8]>()
                     .iter()
-                    .map(|&b| if b == SUBFIELD_DELIMITER { '$' } else { b as char })
+                    .map(|&b| {
+                        if b == SUBFIELD_DELIMITER {
+                            '$'
+                        } else {
+                            b as char
+                        }
+                    })
                     .collect::<String>()
             }
         };
