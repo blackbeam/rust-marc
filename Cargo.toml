@@ -1,6 +1,6 @@
 [package]
 name = "marc"
-version = "2.0.0"
+version = "3.0.0"
 authors = ["AIkorsky <aikorsky@gmail.com>"]
 description = "Reader and builder for MARC 21 Bibliographic format"
 license = "MIT/Apache-2.0"
