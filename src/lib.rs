@@ -865,7 +865,7 @@ mod tests {
         use std::io;
 
         #[test]
-        fn shoud_parse_record() {
+        fn should_parse_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
             assert_eq!(record.record_status(), RecordStatus::New);
             assert_eq!(record.type_of_record(), TypeOfRecord::LanguageMaterial);
@@ -1082,7 +1082,7 @@ mod tests {
         }
 
         #[test]
-        fn sholud_build_record() {
+        fn should_build_record() {
             let record = Record::parse(&RECS.as_bytes()[..963]).unwrap();
 
             let mut builder = RecordBuilder::new();
