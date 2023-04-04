@@ -103,7 +103,7 @@ impl fmt::Debug for Tag {
 
 impl fmt::Display for Tag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Tag({})", String::from_utf8_lossy(&self.0))
+        write!(f, "={}", String::from_utf8_lossy(&self.0))
     }
 }
 
