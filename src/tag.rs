@@ -15,6 +15,15 @@ impl Tag {
         this.0.copy_from_slice(bytes);
         this
     }
+
+    /// Returns tag as a `str`.
+    ///
+    /// # Panic
+    ///
+    /// Will panic in case of non-utf8 indicator.
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.0).expect("non-utf8 tag")
+    }
 }
 
 impl PartialEq<[u8; 3]> for Tag {

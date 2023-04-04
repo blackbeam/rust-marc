@@ -201,7 +201,7 @@ impl<'a> Record<'a> {
                 data_offset,
                 directory,
                 data,
-            } = Record::parse(&*input)?;
+            } = Record::parse(&input)?;
             assert_eq!(input.len(), data.as_ref().len());
             (data_offset, directory)
         };
@@ -225,7 +225,7 @@ impl<'a> Record<'a> {
 
         input.read_exact(&mut data[1..])?;
 
-        let len = misc::read_dec_5(&*data)?;
+        let len = misc::read_dec_5(&data)?;
 
         if len < 5 {
             return Err(Error::RecordTooShort(len));
@@ -260,6 +260,70 @@ impl<'a> Record<'a> {
     /// Will return iterator over fields of a record
     pub fn fields(&self) -> Fields<'_> {
         Fields::new(self)
+    }
+
+    /// Asserts that record uses unicode character coding scheme.
+    ///
+    /// * returns `false` if character scheme is MARC-8.
+    /// * returns error on unknown character coding scheme
+    /// * returns error if character scheme is specified as UCS/Unicode but record contains
+    ///   non-unicode sequences.
+    ///
+    /// ```rust
+    ///
+    /// # use marc::*;
+    /// # use std::{io, fs};
+    /// # fn main() -> marc::Result<()> {
+    /// let input = fs::File::open("test/fixtures/3records.mrc")?;
+    ///
+    /// for record in Records::new(input) {
+    ///     assert!(record?.is_unicode().unwrap());
+    /// }
+    ///
+    /// let mut marc8 = fs::read("test/fixtures/marc-8.sample.mrc")?;
+    /// let record = Record::parse(&marc8).unwrap();
+    /// assert!(!record.is_unicode().unwrap());
+    ///
+    /// marc8[9] = b'a';
+    /// marc8[1024] = 0xCC;
+    /// let record = Record::parse(&marc8).unwrap();
+    /// assert!(
+    ///     matches!(
+    ///         record.is_unicode().unwrap_err(),
+    ///         Error::NonUnicodeSequence(ptr)
+    ///             if ptr == Pointer::Subfield(Tag::from_slice(b"260"), Identifier(b'b'))));
+    /// # Ok(()) }
+    /// ```
+    pub fn is_unicode(&self) -> crate::Result<bool> {
+        match self.character_coding_scheme() {
+            CharacterCodingScheme::Marc8 => Ok(false),
+            CharacterCodingScheme::Unknown(x) => Err(Error::UnknownCharacterCodingScheme(x)),
+            CharacterCodingScheme::UcsUnicode => {
+                std::str::from_utf8(&self.data[..24])
+                    .map_err(|_| Error::NonUnicodeSequence(Pointer::Leader))?;
+                for field in self.fields() {
+                    let tag = field.get_tag();
+                    let data = field.get_data::<[u8]>();
+                    if data.contains(&SUBFIELD_DELIMITER) {
+                        for subfield in field.subfields() {
+                            let data = subfield.get_data::<[u8]>();
+                            std::str::from_utf8(data).map_err(|_| {
+                                Error::NonUnicodeSequence(Pointer::Subfield(
+                                    tag,
+                                    subfield.get_identifier(),
+                                ))
+                            })?;
+                        }
+                        std::str::from_utf8(data)
+                            .map_err(|_| Error::NonUnicodeSequence(Pointer::Field(tag)))?;
+                    } else {
+                        std::str::from_utf8(data)
+                            .map_err(|_| Error::NonUnicodeSequence(Pointer::Field(tag)))?;
+                    }
+                }
+                Ok(true)
+            }
+        }
     }
 
     get!(RecordStatus, record_status, 5);
@@ -425,7 +489,7 @@ impl RecordBuilder {
             .fields
             .clone()
             .into_iter()
-            .filter(|ref f| {
+            .filter(|f| {
                 let f = Field::from_repr(f);
                 fun(&f)
             })
@@ -445,7 +509,7 @@ impl RecordBuilder {
             .into_iter()
             .map(|f| {
                 let fld = Field::from_repr(&f);
-                f.filter_subfields(|sf| fun(&fld, &sf))
+                f.filter_subfields(|sf| fun(&fld, sf))
             })
             .collect();
         self.fields = fields;
@@ -496,7 +560,7 @@ impl RecordBuilder {
 
         data.push(RECORD_TERMINATOR);
 
-        let (data_offset, directory) = match Record::parse(&*data) {
+        let (data_offset, directory) = match Record::parse(&data) {
             Ok(Record {
                 data: _,
                 data_offset,

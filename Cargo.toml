@@ -8,8 +8,8 @@ repository = "https://github.com/blackbeam/rust-marc"
 documentation = "https://blackbeam.github.io/rust-marc"
 readme = "README.md"
 keywords = ["MARC", "MARC21", "bibliographic", "parser", "builder"]
-exclude = [".*"]
-edition = "2018"
+exclude = [".*", "test"]
+edition = "2021"
 
 [lib]
 name = "marc"

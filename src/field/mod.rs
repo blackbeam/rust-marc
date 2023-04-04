@@ -5,6 +5,7 @@ use std::{fmt, str};
 
 use self::subfield::{subfields::Subfields, Subfield};
 use crate::{errors::*, Identifier, Indicator, Tag, MAX_FIELD_LEN, SUBFIELD_DELIMITER};
+
 /// View into a field of a MARC record
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Field<'a> {
@@ -32,13 +33,25 @@ impl<'a> Field<'a> {
     pub fn from_repr(repr: &'a FieldRepr) -> Field<'a> {
         Field {
             tag: repr.tag,
-            data: &*repr.data,
+            data: &repr.data,
         }
     }
 
     /// Returns tag of the field.
     pub fn get_tag(&self) -> Tag {
         self.tag
+    }
+
+    /// Returns a field indicator.
+    ///
+    /// Makes sence only for variable data fields.
+    ///
+    /// # Panic
+    ///
+    /// Will panic if `self.data.len() < 2`.
+    pub fn get_indicator(&self) -> Indicator {
+        let first_two_bytes = self.data.get(..2).expect("field contains no indicator");
+        Indicator::from_slice(first_two_bytes)
     }
 
     /// Returns data of the field.
@@ -117,10 +130,10 @@ impl FieldRepr {
             let mut new_data = vec![];
             new_data.extend_from_slice(&self.data[0..2]);
 
-            let f = Field::from_repr(&self);
+            let f = Field::from_repr(self);
             let sfs = f
                 .subfields()
-                .filter(|ref sf| fun(sf))
+                .filter(|sf| fun(sf))
                 .collect::<Vec<subfield::Subfield<'_>>>();
 
             for sf in sfs {
@@ -145,7 +158,7 @@ impl FieldRepr {
 
     /// Returns data of a field (no field terminator).
     pub fn get_data(&self) -> &[u8] {
-        &*self.data
+        &self.data
     }
 }
 
@@ -161,7 +174,7 @@ impl fmt::Display for FieldRepr {
             f,
             "Field({} Data({}))",
             self.tag,
-            str::from_utf8(&*self.data).unwrap()
+            str::from_utf8(&self.data).unwrap()
         )
     }
 }

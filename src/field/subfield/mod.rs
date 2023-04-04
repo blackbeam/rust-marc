@@ -17,7 +17,7 @@ pub struct Subfield<'a> {
 
 impl<'a> Subfield<'a> {
     #[doc(hidden)]
-    pub fn find<'f, 'r, Ident>(f: &'r Field<'f>, identifier: Ident) -> Vec<Subfield<'r>>
+    pub fn find<'r, Ident>(f: &'r Field<'_>, identifier: Ident) -> Vec<Subfield<'r>>
     where
         Ident: Into<Identifier>,
     {
