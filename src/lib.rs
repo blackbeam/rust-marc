@@ -284,18 +284,10 @@ impl AsRef<[u8]> for Record<'_> {
 
 impl<'a> fmt::Display for Record<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Leader: {}",
-            String::from_utf8_lossy(&self.as_ref()[0..24])
-        )?;
+        let leader = &self.as_ref()[0..24];
+        writeln!(f, "=LDR  {}", String::from_utf8_lossy(leader))?;
         for field in self.fields() {
-            writeln!(
-                f,
-                "Field: {} Data({})",
-                field.get_tag(),
-                field.get_data::<str>()
-            )?;
+            writeln!(f, "{}", field)?;
         }
         Ok(())
     }
@@ -1165,6 +1157,35 @@ mod tests {
             builder.filter_subfields(|_, sf| sf.get_data::<[u8]>() != &b"filter"[..]);
 
             assert_eq!(builder.get_record().unwrap().as_ref(), record.as_ref());
+        }
+
+
+        #[test]
+        fn should_display_record() {
+            let mut builder = RecordBuilder::new();
+            builder.add_fields(fields!(
+                data fields: [
+                    b"245", b"00", [
+                        b'a' => "Book title",
+                        b'b' => "Book Subtitle",
+                    ],
+                    b"100", b"1 ", [
+                        b'a' => "Author Name",
+                    ],
+                    b"041", b"0 ", [
+                        b'a' => "eng",
+                    ],
+                ];
+                control fields: [
+                    b"008" => "210128t20212021enka    sb    000 0 eng d",
+                    b"001" => "000000001",
+                ];
+            )).unwrap();
+            let record = builder.get_record().unwrap();
+
+            let expected = "=LDR  00191nam  2200085 i 4500\n=001  000000001\n=008  210128t20212021enka\\\\\\\\sb\\\\\\\\000\\0\\eng\\d\n=041  0 $aeng\n=100  1 $aAuthor Name\n=245  00$aBook title$bBook Subtitle\n".to_string();
+
+            assert_eq!(format!("{}", record), expected);
         }
     }
 
