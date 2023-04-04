@@ -49,6 +49,27 @@ impl<'a> Field<'a> {
     }
 }
 
+impl fmt::Display for Field<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tag = self.get_tag();
+        let field_data = match tag.0 {
+            [b'0', b'0', ..] => {
+                // variable control field
+                self.get_data::<str>().replace(' ', "\\")
+            }
+            _ => {
+                // variable data field
+                self
+                    .get_data::<[u8]>()
+                    .iter()
+                    .map(|&b| if b == SUBFIELD_DELIMITER { '$' } else { b as char })
+                    .collect::<String>()
+            }
+        };
+        write!(f, "{}  {}", tag, field_data)
+    }
+}
+
 /// MARC field representation
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FieldRepr {
