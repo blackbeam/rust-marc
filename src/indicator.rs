@@ -9,9 +9,25 @@ impl Indicator {
     ///
     /// Will panic if `bytes.len() != 2`.
     pub fn from_slice(bytes: &[u8]) -> Self {
-        let mut this = Indicator([0; 2]);
-        this.0.copy_from_slice(bytes);
-        this
+        Indicator(bytes.try_into().expect("indicator size mismatch"))
+    }
+
+    /// Returns the first indicator as `str`.
+    ///
+    /// # Panic
+    ///
+    /// Will panic in case of non-utf8 indicator.
+    pub fn first(&self) -> &str {
+        std::str::from_utf8(&self.0[..1]).expect("non-utf8 indicator")
+    }
+
+    /// Returns the second indicator as `str`.
+    ///
+    /// # Panic
+    ///
+    /// Will panic in case of non-utf8 indicator.
+    pub fn second(&self) -> &str {
+        std::str::from_utf8(&self.0[..1]).expect("non-utf8 indicator")
     }
 }
 
