@@ -174,19 +174,18 @@ impl XmlElementBlock for Field<'_> {
         let tag = self.get_tag();
         match tag.0 {
             [b'0', b'0', ..] => {
-                let attributes = vec![("tag", std::str::from_utf8(&tag.0)?)];
+                let attributes = vec![("tag", tag.as_str())];
                 write_element("marc:controlfield", attributes, w, |w| {
                     w.write(XmlEvent::Characters(self.get_data::<str>()))
                         .map_err(Into::into)
                 })?;
             }
             _ => {
-                let ind1 = [self.get_data::<[u8]>()[0]];
-                let ind2 = [self.get_data::<[u8]>()[0]];
+                let indicator = self.get_indicator();
                 let attributes = vec![
-                    ("tag", std::str::from_utf8(&tag.0)?),
-                    ("ind1", std::str::from_utf8(&ind1)?),
-                    ("ind2", std::str::from_utf8(&ind2)?),
+                    ("tag", tag.as_str()),
+                    ("ind1", indicator.first()),
+                    ("ind2", indicator.second()),
                 ];
                 write_element("marc:datafield", attributes, w, |w| {
                     for subfield in self.subfields() {
@@ -206,8 +205,8 @@ impl XmlElementBlock for Field<'_> {
 
 impl XmlElementBlock for Subfield<'_> {
     fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
-        let code = [self.get_identifier().0];
-        let attributes = vec![("code", std::str::from_utf8(&code).unwrap())];
+        let code: &str = &self.get_identifier().as_char().to_string();
+        let attributes = vec![("code", code)];
         write_element("marc:subfield", attributes, w, |w| {
             w.write(XmlEvent::Characters(self.get_data::<str>()))
                 .map_err(Into::into)
