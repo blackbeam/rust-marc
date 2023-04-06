@@ -16,6 +16,9 @@ pub enum Error {
     UnexpectedEofInDirectory,
     NoRecordTerminator,
     UnexpectedSubfieldEnd,
+    Utf8Error(String),
+    #[cfg(feature = "xml")]
+    XmlError(String),
     Io(io::ErrorKind),
 }
 
@@ -42,6 +45,9 @@ impl fmt::Display for Error {
             Error::NoRecordTerminator => write!(f, "No record terminator"),
             Error::UnexpectedSubfieldEnd => write!(f, "Unexpected end of a subfield"),
             Error::Io(err) => write!(f, "IO error: {:?}", err),
+            Error::Utf8Error(err) => write!(f, "UTF8 error: {}", err),
+            #[cfg(feature = "xml")]
+            Error::XmlError(err) => write!(f, "XML error: {}", err),
         }
     }
 }
@@ -51,5 +57,11 @@ impl ::std::error::Error for Error {}
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::Io(err.kind())
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(err: std::str::Utf8Error) -> Error {
+        Error::Utf8Error(err.to_string())
     }
 }
