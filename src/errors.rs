@@ -1,8 +1,19 @@
 use std::{fmt, io};
 
-use crate::tag::Tag;
+use crate::{tag::Tag, Identifier};
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T, E = Error> = ::std::result::Result<T, E>;
+
+/// Points to a record data.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Pointer {
+    /// Points to a record leader.
+    Leader,
+    /// Points to a filed.
+    Field(Tag),
+    /// Points to a subfield.
+    Subfield(Tag, Identifier),
+}
 
 /// Errors of this crate.
 #[derive(Debug)]
@@ -16,6 +27,8 @@ pub enum Error {
     UnexpectedEofInDirectory,
     NoRecordTerminator,
     UnexpectedSubfieldEnd,
+    NonUnicodeSequence(Pointer),
+    UnknownCharacterCodingScheme(u8),
     Utf8Error(String),
     #[cfg(feature = "xml")]
     XmlError(String),
@@ -44,6 +57,16 @@ impl fmt::Display for Error {
             Error::UnexpectedEofInDirectory => write!(f, "Unexpected EOF while reading directory"),
             Error::NoRecordTerminator => write!(f, "No record terminator"),
             Error::UnexpectedSubfieldEnd => write!(f, "Unexpected end of a subfield"),
+            Error::UnknownCharacterCodingScheme(val) => {
+                write!(f, "Unknown character coding scheme 0x{val:02x}")
+            }
+            Error::NonUnicodeSequence(ptr) => match ptr {
+                Pointer::Leader => write!(f, "Non unicode sequence in the record leater"),
+                Pointer::Field(tag) => write!(f, "Non unicode sequence in field {}", tag),
+                Pointer::Subfield(tag, id) => {
+                    write!(f, "Non unicode sequence in subfield {}${}", tag, id)
+                }
+            },
             Error::Io(err) => write!(f, "IO error: {:?}", err),
             Error::Utf8Error(err) => write!(f, "UTF8 error: {}", err),
             #[cfg(feature = "xml")]
