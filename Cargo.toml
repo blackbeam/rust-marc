@@ -18,3 +18,7 @@ path = "src/lib.rs"
 [features]
 default = []
 nightly = []
+xml = ["dep:xml-rs"]
+
+[dependencies]
+xml-rs = { version = "0.8", optional = true }
