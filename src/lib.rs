@@ -112,9 +112,13 @@ mod identifier;
 mod indicator;
 mod misc;
 mod tag;
+#[cfg(feature = "xml")]
+mod xml;
 
 pub use errors::*;
 
+#[cfg(feature = "xml")]
+pub use crate::xml::MarcXml;
 #[doc(inline)]
 pub use field::fields::Fields;
 #[doc(inline)]
