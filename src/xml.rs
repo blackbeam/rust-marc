@@ -79,22 +79,29 @@ const MARCXML_NS: &[(&str, &str)] = &[
     ),
 ];
 
-pub trait XmlElementBlock {
+pub trait XmlElement {
     fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()>;
-    fn xml_element_with_namespace<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()>;
 }
 
-pub trait MarcCollection<T: XmlElementBlock> {}
-impl MarcCollection<Record<'_>> for Vec<Record<'_>> {}
-impl MarcCollection<Record<'_>> for Record<'_> {}
+pub trait XmlRootElement<T: XmlElement> {
+    fn xml_root_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()>;
+}
 
-/// Output a single or a collection of records as MARC XML
+/// Output a single record or a collection of records as MARC XML
 pub trait MarcXml<'a>
 where
-    Self: MarcCollection<Record<'a>>,
+    Self: XmlRootElement<Record<'a>>,
 {
     /// Output MARC XML
-    fn xml(&self, pretty_print: bool) -> Result<Vec<u8>>;
+    fn xml(&self, pretty_print: bool) -> Result<Vec<u8>> {
+        let mut buffer = Vec::new();
+        let mut writer = EmitterConfig::new()
+            .perform_indent(pretty_print)
+            .create_writer(&mut buffer);
+
+        self.xml_root_element(&mut writer)?;
+        Ok(buffer)
+    }
 
     /// Output minified (outdented) MARC XML
     fn xml_minified(&self) -> Result<Vec<u8>> {
@@ -107,53 +114,23 @@ where
     }
 }
 
-impl<'a> MarcXml<'a> for Vec<Record<'a>> {
-    fn xml(&self, pretty_print: bool) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        let mut writer = EmitterConfig::new()
-            .perform_indent(pretty_print)
-            .create_writer(&mut buffer);
+impl<'a> MarcXml<'a> for Vec<Record<'a>> {}
+impl<'a> MarcXml<'a> for Record<'a> {}
 
-        write_element("marc:collection", MARCXML_NS.to_vec(), &mut writer, |w| {
+impl XmlRootElement<Record<'_>> for Vec<Record<'_>> {
+    fn xml_root_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
+        write_element("marc:collection", MARCXML_NS.to_vec(), w, |w| {
             for record in self {
                 record.xml_element(w)?;
             }
             Ok(())
         })?;
-
-        Ok(buffer)
+        Ok(())
     }
 }
 
-impl<'a> MarcXml<'a> for Record<'a> {
-    fn xml(&self, pretty_print: bool) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        let mut writer = EmitterConfig::new()
-            .perform_indent(pretty_print)
-            .create_writer(&mut buffer);
-
-        self.xml_element_with_namespace(&mut writer)?;
-        Ok(buffer)
-    }
-}
-
-impl XmlElementBlock for Record<'_> {
-    fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
-        write_element("marc:record", vec![], w, |w| {
-            write_element("marc:leader", vec![], w, |w| {
-                w.write(XmlEvent::Characters(&String::from_utf8_lossy(
-                    &self.as_ref()[0..24],
-                )))
-                .map_err(Into::into)
-            })?;
-            for field in self.fields() {
-                field.xml_element(w)?;
-            }
-            Ok(())
-        })
-    }
-
-    fn xml_element_with_namespace<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
+impl XmlRootElement<Record<'_>> for Record<'_> {
+    fn xml_root_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
         write_element("marc:record", MARCXML_NS.to_vec(), w, |w| {
             write_element("marc:leader", vec![], w, |w| {
                 w.write(XmlEvent::Characters(&String::from_utf8_lossy(
@@ -169,7 +146,24 @@ impl XmlElementBlock for Record<'_> {
     }
 }
 
-impl XmlElementBlock for Field<'_> {
+impl XmlElement for Record<'_> {
+    fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
+        write_element("marc:record", vec![], w, |w| {
+            write_element("marc:leader", vec![], w, |w| {
+                w.write(XmlEvent::Characters(&String::from_utf8_lossy(
+                    &self.as_ref()[0..24],
+                )))
+                .map_err(Into::into)
+            })?;
+            for field in self.fields() {
+                field.xml_element(w)?;
+            }
+            Ok(())
+        })
+    }
+}
+
+impl XmlElement for Field<'_> {
     fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
         let tag = self.get_tag();
         match tag.0 {
@@ -197,13 +191,9 @@ impl XmlElementBlock for Field<'_> {
         }
         Ok(())
     }
-
-    fn xml_element_with_namespace<W: Write>(&self, _: &mut EventWriter<W>) -> Result<()> {
-        unimplemented!()
-    }
 }
 
-impl XmlElementBlock for Subfield<'_> {
+impl XmlElement for Subfield<'_> {
     fn xml_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()> {
         let code: &str = &self.get_identifier().as_char().to_string();
         let attributes = vec![("code", code)];
@@ -212,10 +202,6 @@ impl XmlElementBlock for Subfield<'_> {
                 .map_err(Into::into)
         })?;
         Ok(())
-    }
-
-    fn xml_element_with_namespace<W: Write>(&self, _: &mut EventWriter<W>) -> Result<()> {
-        unimplemented!()
     }
 }
 
