@@ -1229,6 +1229,9 @@ mod tests {
             builder
                 .add_fields(fields!(
                     data fields: [
+                        b"264", b" 1", [
+                            b'a' => "León, Spain",
+                        ],
                         b"245", b"00", [
                             b'a' => "Book title",
                             b'b' => "Book Subtitle",
@@ -1248,7 +1251,7 @@ mod tests {
                 .unwrap();
             let record = builder.get_record().unwrap();
 
-            let expected = "=LDR  00191nam  2200085 i 4500\n=001  000000001\n=008  210128t20212021enka\\\\\\\\sb\\\\\\\\000\\0\\eng\\d\n=041  0 $aeng\n=100  1 $aAuthor Name\n=245  00$aBook title$bBook Subtitle\n".to_string();
+            let expected = "=LDR  00220nam  2200097 i 4500\n=001  000000001\n=008  210128t20212021enka\\\\\\\\sb\\\\\\\\000\\0\\eng\\d\n=041  0 $aeng\n=100  1 $aAuthor Name\n=245  00$aBook title$bBook Subtitle\n=264   1$aLeón, Spain\n".to_string();
 
             assert_eq!(format!("{}", record), expected);
         }

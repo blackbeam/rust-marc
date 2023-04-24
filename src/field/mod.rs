@@ -72,16 +72,14 @@ impl fmt::Display for Field<'_> {
             }
             _ => {
                 // variable data field
-                self.get_data::<[u8]>()
-                    .iter()
-                    .map(|&b| {
-                        if b == SUBFIELD_DELIMITER {
-                            '$'
-                        } else {
-                            b as char
-                        }
-                    })
-                    .collect::<String>()
+                String::from_utf8_lossy(
+                    &self
+                        .get_data::<[u8]>()
+                        .iter()
+                        .map(|b| if *b == SUBFIELD_DELIMITER { 36 } else { *b })
+                        .collect::<Vec<u8>>(),
+                )
+                .to_string()
             }
         };
         write!(f, "{}  {}", tag, field_data)
