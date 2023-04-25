@@ -29,6 +29,9 @@ pub enum Error {
     UnexpectedSubfieldEnd,
     NonUnicodeSequence(Pointer),
     UnknownCharacterCodingScheme(u8),
+    Utf8Error(std::str::Utf8Error),
+    #[cfg(feature = "xml")]
+    XmlError(xml::writer::Error),
     Io(io::ErrorKind),
 }
 
@@ -65,14 +68,43 @@ impl fmt::Display for Error {
                 }
             },
             Error::Io(err) => write!(f, "IO error: {:?}", err),
+            Error::Utf8Error(err) => write!(f, "UTF8 error: {}", err),
+            #[cfg(feature = "xml")]
+            Error::XmlError(err) => write!(f, "XML error: {}", err),
         }
     }
 }
 
-impl ::std::error::Error for Error {}
+impl ::std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::UnexpectedByteInDecNum(_)
+            | Error::FieldTooLarge(_)
+            | Error::RecordTooLarge(_)
+            | Error::RecordTooShort(_)
+            | Error::UnexpectedEofInDecNum
+            | Error::UnexpectedEof
+            | Error::UnexpectedEofInDirectory
+            | Error::NoRecordTerminator
+            | Error::UnexpectedSubfieldEnd
+            | Error::NonUnicodeSequence(_)
+            | Error::UnknownCharacterCodingScheme(_)
+            | Error::Io(_) => None,
+            Error::Utf8Error(ref e) => Some(e as &_),
+            #[cfg(feature = "xml")]
+            Error::XmlError(ref e) => Some(e as &_),
+        }
+    }
+}
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::Io(err.kind())
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(err: std::str::Utf8Error) -> Error {
+        Error::Utf8Error(err)
     }
 }

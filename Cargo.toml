@@ -18,3 +18,12 @@ path = "src/lib.rs"
 [features]
 default = []
 nightly = []
+xml = ["dep:xml-rs"]
+
+[dependencies]
+xml-rs = { version = "0.8", optional = true }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+no-default-features = true
+features = ["default", "xml"]
