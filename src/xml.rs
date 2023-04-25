@@ -226,7 +226,7 @@ fn write_element<W: Write, F: Fn(&mut EventWriter<W>) -> Result<()>>(
 
 impl From<xml::writer::Error> for Error {
     fn from(error: xml::writer::Error) -> Error {
-        Error::XmlError(error.to_string())
+        Error::XmlError(error)
     }
 }
 
