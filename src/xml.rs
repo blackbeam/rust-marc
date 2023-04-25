@@ -88,6 +88,7 @@ pub trait XmlRootElement<T: XmlElement> {
 /// # Ok(())
 /// # }
 /// ```
+#[cfg_attr(docsrs, doc(cfg(feature = "xml")))]
 pub trait MarcXml<'a>
 where
     Self: XmlRootElement<Record<'a>>,
