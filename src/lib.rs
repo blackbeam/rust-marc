@@ -118,6 +118,7 @@ mod xml;
 pub use errors::*;
 
 #[cfg(feature = "xml")]
+#[doc(inline)]
 pub use crate::xml::MarcXml;
 #[doc(inline)]
 pub use field::fields::Fields;

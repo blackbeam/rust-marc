@@ -1,70 +1,4 @@
 //! # Module to convert MARC 21 records to MARC XML
-//!
-//! ## Examples
-//!
-//! ### Outputting a single record
-//!
-//! ```rust
-//! # use marc::*;
-//! # fn main() -> Result<()> {
-//! let mut builder = RecordBuilder::new();
-//! let record = builder
-//!     .add_fields(fields!(
-//!         control fields: [
-//!             b"001" => "000000002",
-//!             b"003" => "RuMoRGB",
-//!         ];
-//!         data fields: [
-//!             b"979", b"  ", [
-//!                 b'a' => "autoref",
-//!                 b'a' => "dlopen",
-//!             ],
-//!         ];
-//!     ))?
-//!     .get_record()?;
-//! assert_eq!(String::from_utf8(record.xml_minified()?).unwrap(), "<?xml version=\"1.0\" encoding=\
-//! \"utf-8\"?><marc:record xmlns:marc=\"http://www.loc.gov/MARC21/slim\" xmlns:xsi=\"http://www.w3\
-//! .org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.loc.gov/MARC21/slim http://www.l\
-//! oc.gov/standards/marcxml/schema/MARC21slim.xsd\"><marc:leader>00100nam  2200061 i 4500</marc:le\
-//! ader><marc:controlfield tag=\"001\">000000002</marc:controlfield><marc:controlfield tag=\"003\"\
-//! >RuMoRGB</marc:controlfield><marc:datafield tag=\"979\" ind1=\" \" ind2=\" \"><marc:subfield co\
-//! de=\"a\">autoref</marc:subfield><marc:subfield code=\"a\">dlopen</marc:subfield></marc:datafiel\
-//! d></marc:record>".to_string());
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Outputting a collection of records
-//!
-//! ```rust
-//! # use marc::*;
-//! # fn main() -> Result<()> {
-//! let mut builder = RecordBuilder::new();
-//! let records = vec![builder
-//!     .add_fields(fields!(
-//!         control fields: [
-//!             b"001" => "000000002",
-//!             b"003" => "RuMoRGB",
-//!         ];
-//!         data fields: [
-//!             b"979", b"  ", [
-//!                 b'a' => "autoref",
-//!                 b'a' => "dlopen",
-//!             ],
-//!         ];
-//!     ))?
-//!     .get_record()?];
-//! assert_eq!(String::from_utf8(records.xml_minified()?).unwrap(), "<?xml version=\"1.0\" enc\
-//! oding=\"utf-8\"?><marc:collection xmlns:marc=\"http://www.loc.gov/MARC21/slim\" xmlns:xsi=\"htt\
-//! p://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.loc.gov/MARC21/slim ht\
-//! tp://www.loc.gov/standards/marcxml/schema/MARC21slim.xsd\"><marc:record><marc:leader>00100nam  \
-//! 2200061 i 4500</marc:leader><marc:controlfield tag=\"001\">000000002</marc:controlfield><marc:c\
-//! ontrolfield tag=\"003\">RuMoRGB</marc:controlfield><marc:datafield tag=\"979\" ind1=\" \" ind2=\
-//! \" \"><marc:subfield code=\"a\">autoref</marc:subfield><marc:subfield code=\"a\">dlopen</marc:s\
-//! ubfield></marc:datafield></marc:record></marc:collection>".to_string());
-//! # Ok(())
-//! # }
-//! ```
 
 use crate::{Error, Field, Record, Result, Subfield};
 use std::io::Write;
@@ -87,7 +21,73 @@ pub trait XmlRootElement<T: XmlElement> {
     fn xml_root_element<W: Write>(&self, w: &mut EventWriter<W>) -> Result<()>;
 }
 
-/// Output a single record or a collection of records as MARC XML
+/// Output a single record or a collection of records as MARC XML.
+///
+/// ## Examples
+///
+/// ### Outputting a single record
+///
+/// ```rust
+/// # use marc::*;
+/// # fn main() -> Result<()> {
+/// let mut builder = RecordBuilder::new();
+/// let record = builder
+///     .add_fields(fields!(
+///         control fields: [
+///             b"001" => "000000002",
+///             b"003" => "RuMoRGB",
+///         ];
+///         data fields: [
+///             b"979", b"  ", [
+///                 b'a' => "autoref",
+///                 b'a' => "dlopen",
+///             ],
+///         ];
+///     ))?
+///     .get_record()?;
+/// assert_eq!(String::from_utf8(record.xml_minified()?).unwrap(), "<?xml version=\"1.0\" encoding=\
+/// \"utf-8\"?><marc:record xmlns:marc=\"http://www.loc.gov/MARC21/slim\" xmlns:xsi=\"http://www.w3\
+/// .org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.loc.gov/MARC21/slim http://www.l\
+/// oc.gov/standards/marcxml/schema/MARC21slim.xsd\"><marc:leader>00100nam  2200061 i 4500</marc:le\
+/// ader><marc:controlfield tag=\"001\">000000002</marc:controlfield><marc:controlfield tag=\"003\"\
+/// >RuMoRGB</marc:controlfield><marc:datafield tag=\"979\" ind1=\" \" ind2=\" \"><marc:subfield co\
+/// de=\"a\">autoref</marc:subfield><marc:subfield code=\"a\">dlopen</marc:subfield></marc:datafiel\
+/// d></marc:record>".to_string());
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ### Outputting a collection of records
+///
+/// ```rust
+/// # use marc::*;
+/// # fn main() -> Result<()> {
+/// let mut builder = RecordBuilder::new();
+/// let records = vec![builder
+///     .add_fields(fields!(
+///         control fields: [
+///             b"001" => "000000002",
+///             b"003" => "RuMoRGB",
+///         ];
+///         data fields: [
+///             b"979", b"  ", [
+///                 b'a' => "autoref",
+///                 b'a' => "dlopen",
+///             ],
+///         ];
+///     ))?
+///     .get_record()?];
+/// assert_eq!(String::from_utf8(records.xml_minified()?).unwrap(), "<?xml version=\"1.0\" enc\
+/// oding=\"utf-8\"?><marc:collection xmlns:marc=\"http://www.loc.gov/MARC21/slim\" xmlns:xsi=\"htt\
+/// p://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.loc.gov/MARC21/slim ht\
+/// tp://www.loc.gov/standards/marcxml/schema/MARC21slim.xsd\"><marc:record><marc:leader>00100nam  \
+/// 2200061 i 4500</marc:leader><marc:controlfield tag=\"001\">000000002</marc:controlfield><marc:c\
+/// ontrolfield tag=\"003\">RuMoRGB</marc:controlfield><marc:datafield tag=\"979\" ind1=\" \" ind2=\
+/// \" \"><marc:subfield code=\"a\">autoref</marc:subfield><marc:subfield code=\"a\">dlopen</marc:s\
+/// ubfield></marc:datafield></marc:record></marc:collection>".to_string());
+/// # Ok(())
+/// # }
+/// ```
 pub trait MarcXml<'a>
 where
     Self: XmlRootElement<Record<'a>>,
