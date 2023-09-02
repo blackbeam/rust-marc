@@ -27,7 +27,7 @@ impl Indicator {
     ///
     /// Will panic in case of non-utf8 indicator.
     pub fn second(&self) -> &str {
-        std::str::from_utf8(&self.0[..1]).expect("non-utf8 indicator")
+        std::str::from_utf8(&self.0[1..]).expect("non-utf8 indicator")
     }
 }
 
