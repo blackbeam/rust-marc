@@ -284,17 +284,17 @@ mod tests {
                                <marc:leader>00220nam  2200097 i 4500</marc:leader>\
                                <marc:controlfield tag=\"001\">000000001</marc:controlfield>\
                                <marc:controlfield tag=\"008\">210128t20212021enka    sb    000 0 eng d</marc:controlfield>\
-                               <marc:datafield tag=\"041\" ind1=\"0\" ind2=\"0\">\
+                               <marc:datafield tag=\"041\" ind1=\"0\" ind2=\" \">\
                                <marc:subfield code=\"a\">eng</marc:subfield>\
                                </marc:datafield>\
-                               <marc:datafield tag=\"100\" ind1=\"1\" ind2=\"1\">\
+                               <marc:datafield tag=\"100\" ind1=\"1\" ind2=\" \">\
                                <marc:subfield code=\"a\">Author Name</marc:subfield>\
                                </marc:datafield>\
                                <marc:datafield tag=\"245\" ind1=\"0\" ind2=\"0\">\
                                <marc:subfield code=\"a\">Book title</marc:subfield>\
                                <marc:subfield code=\"b\">Book Subtitle</marc:subfield>\
                                </marc:datafield>\
-                               <marc:datafield tag=\"264\" ind1=\" \" ind2=\" \">\
+                               <marc:datafield tag=\"264\" ind1=\" \" ind2=\"1\">\
                                <marc:subfield code=\"a\">León, Spain</marc:subfield>\
                                </marc:datafield>\
                                </marc:record>".to_string();
@@ -319,16 +319,16 @@ mod tests {
                 <marc:leader>00220nam  2200097 i 4500</marc:leader>\n  \
                 <marc:controlfield tag=\"001\">000000001</marc:controlfield>\n  \
                 <marc:controlfield tag=\"008\">210128t20212021enka    sb    000 0 eng d</marc:controlfield>\n  \
-                <marc:datafield tag=\"041\" ind1=\"0\" ind2=\"0\">\n    \
+                <marc:datafield tag=\"041\" ind1=\"0\" ind2=\" \">\n    \
                     <marc:subfield code=\"a\">eng</marc:subfield>\n  \
-                </marc:datafield>\n  <marc:datafield tag=\"100\" ind1=\"1\" ind2=\"1\">\n    \
+                </marc:datafield>\n  <marc:datafield tag=\"100\" ind1=\"1\" ind2=\" \">\n    \
                     <marc:subfield code=\"a\">Author Name</marc:subfield>\n  \
                 </marc:datafield>\n  \
                 <marc:datafield tag=\"245\" ind1=\"0\" ind2=\"0\">\n    \
                     <marc:subfield code=\"a\">Book title</marc:subfield>\n    \
                     <marc:subfield code=\"b\">Book Subtitle</marc:subfield>\n  \
                 </marc:datafield>\n  \
-                <marc:datafield tag=\"264\" ind1=\" \" ind2=\" \">\n    \
+                <marc:datafield tag=\"264\" ind1=\" \" ind2=\"1\">\n    \
                     <marc:subfield code=\"a\">León, Spain</marc:subfield>\n  \
                 </marc:datafield>\n\
             </marc:record>".to_string();
@@ -352,17 +352,17 @@ mod tests {
                                <marc:leader>00220nam  2200097 i 4500</marc:leader>\
                                <marc:controlfield tag=\"001\">000000001</marc:controlfield>\
                                <marc:controlfield tag=\"008\">210128t20212021enka    sb    000 0 eng d</marc:controlfield>\
-                               <marc:datafield tag=\"041\" ind1=\"0\" ind2=\"0\">\
+                               <marc:datafield tag=\"041\" ind1=\"0\" ind2=\" \">\
                                <marc:subfield code=\"a\">eng</marc:subfield>\
                                </marc:datafield>\
-                               <marc:datafield tag=\"100\" ind1=\"1\" ind2=\"1\">\
+                               <marc:datafield tag=\"100\" ind1=\"1\" ind2=\" \">\
                                <marc:subfield code=\"a\">Author Name</marc:subfield>\
                                </marc:datafield>\
                                <marc:datafield tag=\"245\" ind1=\"0\" ind2=\"0\">\
                                <marc:subfield code=\"a\">Book title</marc:subfield>\
                                <marc:subfield code=\"b\">Book Subtitle</marc:subfield>\
                                </marc:datafield>\
-                               <marc:datafield tag=\"264\" ind1=\" \" ind2=\" \">\
+                               <marc:datafield tag=\"264\" ind1=\" \" ind2=\"1\">\
                                <marc:subfield code=\"a\">León, Spain</marc:subfield>\
                                </marc:datafield>\
                                </marc:record>\
@@ -389,16 +389,16 @@ mod tests {
                     <marc:leader>00220nam  2200097 i 4500</marc:leader>\n    \
                     <marc:controlfield tag=\"001\">000000001</marc:controlfield>\n    \
                     <marc:controlfield tag=\"008\">210128t20212021enka    sb    000 0 eng d</marc:controlfield>\n    \
-                    <marc:datafield tag=\"041\" ind1=\"0\" ind2=\"0\">\n      \
+                    <marc:datafield tag=\"041\" ind1=\"0\" ind2=\" \">\n      \
                         <marc:subfield code=\"a\">eng</marc:subfield>\n    \
                     </marc:datafield>\n    \
-                    <marc:datafield tag=\"100\" ind1=\"1\" ind2=\"1\">\n      \
+                    <marc:datafield tag=\"100\" ind1=\"1\" ind2=\" \">\n      \
                         <marc:subfield code=\"a\">Author Name</marc:subfield>\n    \
                     </marc:datafield>\n    \
                     <marc:datafield tag=\"245\" ind1=\"0\" ind2=\"0\">\n      \
                         <marc:subfield code=\"a\">Book title</marc:subfield>\n      \
                         <marc:subfield code=\"b\">Book Subtitle</marc:subfield>\n    </marc:datafield>\n    \
-                    <marc:datafield tag=\"264\" ind1=\" \" ind2=\" \">\n      \
+                    <marc:datafield tag=\"264\" ind1=\" \" ind2=\"1\">\n      \
                         <marc:subfield code=\"a\">León, Spain</marc:subfield>\n    \
                     </marc:datafield>\n  \
                 </marc:record>\n\
